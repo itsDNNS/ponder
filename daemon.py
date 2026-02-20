@@ -106,6 +106,12 @@ DASHBOARD_HTML = """<!doctype html>
   .session-active { color: #4ade80; }
   .session-ended { color: #888; }
   .wm-key { color: #c084fc; }
+  .pinned { border: 1px solid #e94560; border-radius: 8px; padding: 16px 20px; margin-bottom: 2em; background: #16213e; position: relative; }
+  .pinned h3 { color: #e94560; margin: 0 0 8px 0; font-size: 1.1em; }
+  .pinned pre { background: #1a1a2e; padding: 12px; border-radius: 4px; white-space: pre-wrap; word-wrap: break-word; max-width: 100%; margin: 0; font-size: 0.9em; line-height: 1.5; }
+  .pinned .copy-btn { position: absolute; top: 12px; right: 12px; background: #e94560; color: #fff; border: none; padding: 6px 14px; border-radius: 4px; cursor: pointer; font-family: monospace; font-size: 0.85em; }
+  .pinned .copy-btn:hover { background: #c73650; }
+  .pinned .copy-btn.copied { background: #4ade80; color: #1a1a2e; }
 </style>
 </head><body>
 <h1>Agent Memory</h1>
@@ -119,6 +125,14 @@ DASHBOARD_HTML = """<!doctype html>
   <div class="stat"><div class="stat-value">{{ stats.knowledge_active }}</div><div class="stat-label">Knowledge</div></div>
   <div class="stat"><div class="stat-value">{{ "%.1f KB"|format(stats.db_size_bytes / 1024) }}</div><div class="stat-label">DB Size</div></div>
 </div>
+
+{% for note in pinned_notes %}
+<div class="pinned">
+  <h3>{{ note.subject }}</h3>
+  <button class="copy-btn" onclick="copyNote(this, 'note-{{ note.id }}')">Copy</button>
+  <pre id="note-{{ note.id }}">{{ note.object }}</pre>
+</div>
+{% endfor %}
 
 <div class="tabs">
   <div class="tab active" onclick="showTab('overview')">Overview</div>
@@ -250,6 +264,14 @@ function showTab(name) {
   document.getElementById('tab-' + name).classList.add('active');
   event.target.classList.add('active');
 }
+function copyNote(btn, id) {
+  var text = document.getElementById(id).textContent;
+  navigator.clipboard.writeText(text).then(function() {
+    btn.textContent = 'Copied!';
+    btn.classList.add('copied');
+    setTimeout(function() { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
+  });
+}
 </script>
 </body></html>
 """
@@ -279,6 +301,9 @@ def dashboard():
             except (json.JSONDecodeError, TypeError):
                 pass
 
+    all_knowledge = mem.recall(limit=100)
+    pinned_notes = [k for k in all_knowledge if k.get("category") == "pinned"]
+
     return render_template_string(
         DASHBOARD_HTML,
         stats=mem.stats(),
@@ -288,7 +313,8 @@ def dashboard():
         sessions=sessions[:20],
         wm_by_agent=wm_by_agent,
         all_episodes=all_episodes,
-        all_knowledge=mem.recall(limit=100),
+        all_knowledge=all_knowledge,
+        pinned_notes=pinned_notes,
     )
 
 
