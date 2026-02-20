@@ -1,0 +1,23 @@
+services:
+  agent-memory:
+    image: ghcr.io/itsdnns/agent-memory:latest
+    container_name: Agent-Memory
+    restart: unless-stopped
+    ports:
+      - "9077:9077"
+    volumes:
+      - agent_memory_data:/data
+    environment:
+      - TZ=Europe/Berlin
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:9077/api/status')"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  agent_memory_data:

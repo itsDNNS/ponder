@@ -1,0 +1,6 @@
+*.db
+*.db-wal
+*.db-shm
+*.db.bak
+__pycache__/
+daemon.pid
