@@ -37,6 +37,7 @@ API:
   POST /api/knowledge             Learn (add knowledge)
   POST /api/knowledge/<id>/validate Validate knowledge
   POST /api/knowledge/<id>/forget   Forget knowledge
+  POST /api/maintenance            Run cleanup + decay
   GET  /api/context/<topic>       Cross-tier context
 """
 
@@ -591,7 +592,7 @@ def api_knowledge_create():
     for field in ("subject", "predicate", "object"):
         if not data.get(field):
             return jsonify({"error": f"{field} required"}), 400
-    kid = mem.learn(
+    kwargs = dict(
         subject=data["subject"],
         predicate=data["predicate"],
         object=data["object"],
@@ -601,6 +602,10 @@ def api_knowledge_create():
         tags=data.get("tags"),
         source_episode_id=data.get("source_episode_id"),
     )
+    if data.get("update", False):
+        kid = mem.learn_or_update(**kwargs)
+    else:
+        kid = mem.learn(**kwargs)
     return jsonify({"ok": True, "id": kid})
 
 
@@ -618,6 +623,21 @@ def api_knowledge_validate(kid):
 def api_knowledge_forget(kid):
     mem.forget(kid)
     return jsonify({"ok": True})
+
+
+# ── API: Maintenance ─────────────────────────────────────────
+
+@app.route("/api/maintenance", methods=["POST"])
+def api_maintenance():
+    cleaned_wm = mem.cleanup_expired_wm()
+    cleaned_tasks = mem.cleanup_done_tasks(days=7)
+    decayed = mem.decay_knowledge(days_threshold=30, decay_rate=0.05)
+    return jsonify({
+        "ok": True,
+        "cleaned_wm": cleaned_wm,
+        "cleaned_tasks": cleaned_tasks,
+        "decayed_knowledge": decayed,
+    })
 
 
 # ── API: Cross-Tier Context ─────────────────────────────────
@@ -652,10 +672,16 @@ if __name__ == "__main__":
         log.info("PID file: %s", PID_FILE)
     log.info("Database: %s", mem.db_path)
 
-    # Auto-cleanup: remove done/failed tasks older than 7 days
-    cleaned = mem.cleanup_done_tasks(days=7)
-    if cleaned:
-        log.info("Cleaned up %d old done/failed tasks", cleaned)
+    # Auto-cleanup on startup
+    cleaned_tasks = mem.cleanup_done_tasks(days=7)
+    cleaned_wm = mem.cleanup_expired_wm()
+    decayed = mem.decay_knowledge(days_threshold=30, decay_rate=0.05)
+    if cleaned_tasks:
+        log.info("Cleaned up %d old done/failed tasks", cleaned_tasks)
+    if cleaned_wm:
+        log.info("Cleaned up %d expired working memory entries", cleaned_wm)
+    if decayed:
+        log.info("Decayed confidence of %d unvalidated knowledge entries", decayed)
 
     try:
         from waitress import serve

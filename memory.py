@@ -536,13 +536,17 @@ class AgentMemory:
             return cur.lastrowid
 
     def complete_episode(self, episode_id, outcome, lessons=None):
-        """Complete an episode with outcome and optional lessons."""
+        """Complete an episode with outcome and optional lessons.
+        Auto-promotes lessons to knowledge if present."""
         with self._connect() as conn:
             conn.execute("""
                 UPDATE episodes SET outcome = ?, lessons = ?, ended_at = datetime('now')
                 WHERE id = ?
             """, (outcome, lessons, episode_id))
             conn.commit()
+        # Auto-promote lessons to knowledge
+        if lessons:
+            self.promote_lesson(episode_id)
 
     def get_episode(self, episode_id):
         """Get a single episode with its linked events."""
@@ -657,7 +661,8 @@ class AgentMemory:
     # ── Cross-Tier ────────────────────────────────────────────
 
     def context_for(self, topic):
-        """Get context across all tiers for a topic."""
+        """Get context across all tiers for a topic.
+        Knowledge sorted by confidence, episodes by recency."""
         knowledge = self.recall(query=topic, limit=10)
         episodes = self.search_episodes(query=topic, limit=5)
         # Check all active sessions for relevant working memory
@@ -680,6 +685,11 @@ class AgentMemory:
             "knowledge": knowledge,
             "episodes": episodes,
             "working": working,
+            "summary": {
+                "knowledge_count": len(knowledge),
+                "episodes_count": len(episodes),
+                "working_keys": sum(len(v) for v in working.values()),
+            },
         }
 
     def promote_lesson(self, episode_id):
@@ -693,7 +703,7 @@ class AgentMemory:
             line = line.strip().lstrip("- ")
             if not line:
                 continue
-            kid = self.learn(
+            kid = self.learn_or_update(
                 subject=ep.get("title", "unknown"),
                 predicate="learned",
                 object=line,
@@ -703,3 +713,53 @@ class AgentMemory:
             )
             ids.append(kid)
         return ids
+
+    def decay_knowledge(self, days_threshold=30, decay_rate=0.05, min_confidence=0.1):
+        """Reduce confidence of unvalidated knowledge older than threshold.
+        Returns count of affected entries."""
+        with self._connect() as conn:
+            cur = conn.execute("""
+                UPDATE knowledge
+                SET confidence = MAX(?, confidence - ?),
+                    updated_at = datetime('now')
+                WHERE active = 1
+                  AND validated_by IS NULL
+                  AND updated_at < datetime('now', ? || ' days')
+                  AND confidence > ?
+            """, (min_confidence, decay_rate, f"-{days_threshold}", min_confidence))
+            conn.commit()
+            return cur.rowcount
+
+    def cleanup_expired_wm(self):
+        """Delete expired working memory entries. Returns count deleted."""
+        with self._connect() as conn:
+            cur = conn.execute("""
+                DELETE FROM working_memory
+                WHERE expires_at IS NOT NULL AND expires_at < datetime('now')
+            """)
+            conn.commit()
+            return cur.rowcount
+
+    def learn_or_update(self, subject, predicate, object, category="fact",
+                        source=None, confidence=1.0, tags=None, source_episode_id=None):
+        """Learn new knowledge or strengthen existing if same subject+predicate exists."""
+        with self._connect() as conn:
+            existing = conn.execute("""
+                SELECT id, confidence FROM knowledge
+                WHERE subject = ? AND predicate = ? AND active = 1
+            """, (subject, predicate)).fetchone()
+
+            if existing:
+                # Strengthen: average with new confidence, update object
+                new_conf = min(1.0, (existing["confidence"] + confidence) / 2 + 0.1)
+                conn.execute("""
+                    UPDATE knowledge
+                    SET object = ?, confidence = ?, source = ?,
+                        updated_at = datetime('now')
+                    WHERE id = ?
+                """, (object, new_conf, source, existing["id"]))
+                conn.commit()
+                return existing["id"]
+            else:
+                return self.learn(subject, predicate, object, category,
+                                  source, confidence, tags, source_episode_id)

@@ -20,6 +20,8 @@ Usage:
   am learn <subj> <pred> <obj> [--cat C] Store knowledge
   am forget <id>                         Deactivate knowledge
   am context <topic>                     Cross-tier context
+  am promote <episode_id>                Promote episode lessons -> knowledge
+  am maintenance                         Run cleanup + decay
   am dashboard                           Open web UI
 """
 
@@ -445,7 +447,11 @@ def cmd_episodes(args):
 
 def cmd_episode(args):
     if not args:
-        print("Usage: am episode <id>")
+        print("Usage: am episode <id> | am episode complete <id> <outcome> [--lessons L]")
+        return
+    # Subcommand: episode complete
+    if args[0] == "complete":
+        cmd_episode_complete(args[1:])
         return
     ep = _get(f"/api/episodes/{args[0]}")
     if "error" in ep:
@@ -471,6 +477,24 @@ def cmd_episode(args):
             print(f"    #{e['id']} [{e['event_type']}] {e['source_agent']}  ({e['created_at']})")
 
 
+def cmd_episode_complete(args):
+    if len(args) < 2:
+        print("Usage: am episode complete <id> <outcome> [--lessons L]")
+        return
+    data = {"outcome": args[1]}
+    if "--lessons" in args:
+        idx = args.index("--lessons")
+        if idx + 1 < len(args):
+            data["lessons"] = args[idx + 1]
+    result = _post(f"/api/episodes/{args[0]}/complete", data)
+    if "error" in result:
+        print(f"Error: {result['error']}")
+    else:
+        print(f"Episode #{args[0]} completed ({args[1]}).")
+        if data.get("lessons"):
+            print("  Lessons auto-promoted to knowledge.")
+
+
 def cmd_know(args):
     params = {}
     if args:
@@ -488,9 +512,9 @@ def cmd_know(args):
         print("No knowledge found.")
         return
     for k in knowledge:
-        conf = f" ({k['confidence']:.0%})" if k['confidence'] < 1.0 else ""
-        validated = " *" if k.get("validated_by") else ""
-        print(f"  #{k['id']:<4d} [{k['category']:10s}] {k['subject']} {k['predicate']} {k['object']}{conf}{validated}")
+        conf = f"{k['confidence']:.0%}"
+        validated = " [validated]" if k.get("validated_by") else ""
+        print(f"  #{k['id']:<4d} [{k['category']:10s}] {k['subject']} {k['predicate']} {k['object']}  ({conf}){validated}")
 
 
 def cmd_learn(args):
@@ -560,6 +584,28 @@ def cmd_context(args):
         print(f"No context found for '{topic}'.")
 
 
+def cmd_promote(args):
+    if not args:
+        print("Usage: am promote <episode_id>")
+        return
+    result = _post(f"/api/episodes/{args[0]}/promote")
+    if "error" in result:
+        print(f"Error: {result['error']}")
+        return
+    ids = result.get("knowledge_ids", [])
+    print(f"Promoted {len(ids)} lessons from episode #{args[0]} to knowledge.")
+
+
+def cmd_maintenance():
+    result = _post("/api/maintenance")
+    if "error" in result:
+        print(f"Error: {result['error']}")
+        return
+    print(f"Working memory cleaned: {result.get('cleaned_wm', 0)}")
+    print(f"Tasks cleaned:         {result.get('cleaned_tasks', 0)}")
+    print(f"Knowledge decayed:     {result.get('decayed_knowledge', 0)}")
+
+
 def cmd_dashboard():
     import webbrowser
     webbrowser.open(f"{BASE}/")
@@ -589,6 +635,8 @@ def main():
         print("  am learn <subj> <pred> <obj>           Store knowledge")
         print("  am forget <id>                         Deactivate knowledge")
         print("  am context <topic>                     Cross-tier context")
+        print("  am promote <episode_id>                Promote lessons -> knowledge")
+        print("  am maintenance                         Run cleanup + decay")
         print("  am dashboard                           Open web UI")
         return
 
@@ -634,6 +682,10 @@ def main():
         cmd_forget(rest)
     elif cmd == "context":
         cmd_context(rest)
+    elif cmd == "promote":
+        cmd_promote(rest)
+    elif cmd == "maintenance":
+        cmd_maintenance()
     elif cmd == "dashboard":
         cmd_dashboard()
     else:
