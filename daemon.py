@@ -44,8 +44,10 @@ API:
 import json
 import logging
 import os
+import re
 import signal
 import sys
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from flask import Flask, jsonify, request, render_template_string
@@ -417,10 +419,29 @@ def api_tasks_fail(task_id):
 
 # ── API: Events ──────────────────────────────────────────────
 
+def _parse_since(value):
+    """Parse 'since' param: integer (event ID) or duration like 24h, 7d, 1w."""
+    if not value:
+        return 0, None
+    m = re.fullmatch(r"(\d+)\s*([hdwm])", value.strip())
+    if m:
+        n, unit = int(m.group(1)), m.group(2)
+        delta = {"h": timedelta(hours=n), "d": timedelta(days=n),
+                 "w": timedelta(weeks=n), "m": timedelta(days=n * 30)}[unit]
+        cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - delta
+        return 0, cutoff.strftime("%Y-%m-%d %H:%M:%S")
+    try:
+        return int(value), None
+    except ValueError:
+        return 0, None
+
+
 @app.route("/api/events", methods=["GET"])
 def api_events_list():
+    since_id, since_time = _parse_since(request.args.get("since"))
     return jsonify(mem.get_events(
-        since_id=int(request.args.get("since", 0)),
+        since_id=since_id,
+        since_time=since_time,
         event_type=request.args.get("type"),
         source_agent=request.args.get("source"),
         target_agent=request.args.get("target"),

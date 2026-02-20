@@ -306,10 +306,14 @@ class AgentMemory:
             return cur.lastrowid
 
     def get_events(self, since_id=0, event_type=None, source_agent=None,
-                   target_agent=None, limit=100):
-        """Get events since a given id, with optional filters."""
-        query = "SELECT * FROM events WHERE id > ?"
-        params = [since_id]
+                   target_agent=None, limit=100, since_time=None):
+        """Get events since a given id or time, with optional filters."""
+        if since_time:
+            query = "SELECT * FROM events WHERE created_at >= ?"
+            params = [since_time]
+        else:
+            query = "SELECT * FROM events WHERE id > ?"
+            params = [since_id]
         if event_type:
             query += " AND event_type = ?"
             params.append(event_type)
