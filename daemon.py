@@ -129,18 +129,33 @@ DASHBOARD_HTML = """<!doctype html>
   .chat-body { min-width: 360px; }
   .chat-target { color: #facc15; }
   .api-status { margin-top: 0.6em; color: #888; }
+  .chat-shell { display: grid; grid-template-columns: minmax(220px, 280px) minmax(0, 1fr); gap: 16px; align-items: start; }
+  .chat-sidebar { position: sticky; top: 1em; }
+  .chat-main { min-width: 0; }
+  .chat-sidebar h2, .chat-main h2 { margin-top: 0; }
+  .chat-channel-tabs { display: flex; flex-direction: column; gap: 8px; margin: 12px 0 16px 0; }
+  .chat-channel-tab { display: flex; justify-content: space-between; align-items: center; gap: 12px; width: 100%; padding: 10px 12px; border: 1px solid #23314f; border-radius: 8px; background: #0f172a; color: #dbe4ff; cursor: pointer; text-align: left; }
+  .chat-channel-tab:hover { border-color: #37507e; background: #13203a; }
+  .chat-channel-tab.active { border-color: #e94560; background: #1b223f; }
+  .chat-channel-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .chat-channel-count { font-size: 0.82em; color: #8aa3d1; }
+  .chat-header-row { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
   .chat-toolbar { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin-bottom: 12px; }
   .chat-feed { background: #0f172a; border: 1px solid #23314f; border-radius: 8px; max-height: 58vh; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
   .chat-message { border: 1px solid #23314f; border-radius: 8px; padding: 10px 12px; background: #111b2f; }
   .chat-message.self { border-color: #295d5a; background: #102326; }
   .chat-message.remote { border-color: #2b395d; background: #111b2f; }
   .chat-meta { display: flex; gap: 12px; flex-wrap: wrap; color: #8aa3d1; font-size: 0.9em; margin-bottom: 6px; }
+  .chat-channel-chip { border: 1px solid #37507e; border-radius: 999px; background: #13203a; color: #8aa3d1; padding: 2px 8px; cursor: pointer; }
+  .chat-channel-chip:hover { color: #fff; border-color: #5c7db6; }
   .chat-text { white-space: pre-wrap; word-break: break-word; line-height: 1.45; }
   .chat-status-row { display: flex; justify-content: space-between; gap: 12px; align-items: center; margin: 10px 0 6px 0; flex-wrap: wrap; }
   .chat-follow { color: #8aa3d1; font-size: 0.9em; }
   @media (max-width: 760px) {
     body { margin: 1em; }
     th, td { padding: 6px 8px; }
+    .chat-shell { grid-template-columns: 1fr; }
+    .chat-sidebar { position: static; }
     .chat-feed { max-height: 50vh; }
   }
 </style>
@@ -167,13 +182,13 @@ DASHBOARD_HTML = """<!doctype html>
 {% endfor %}
 
 <div class="tabs">
-  <div class="tab active" onclick="showTab('overview', this)">Overview</div>
-  <div class="tab" onclick="showTab('chat', this)">Chat</div>
-  <div class="tab" onclick="showTab('agents', this)">Agents</div>
-  <div class="tab" onclick="showTab('working', this)">Working Memory</div>
-  <div class="tab" onclick="showTab('episodes', this)">Episodes</div>
-  <div class="tab" onclick="showTab('knowledge', this)">Knowledge</div>
-  <div class="tab" onclick="showTab('onboarding', this)">Onboarding</div>
+  <div class="tab active" data-tab="overview" onclick="showTab('overview', this)">Overview</div>
+  <div class="tab" data-tab="chat" onclick="showTab('chat', this)">Chat</div>
+  <div class="tab" data-tab="agents" onclick="showTab('agents', this)">Agents</div>
+  <div class="tab" data-tab="working" onclick="showTab('working', this)">Working Memory</div>
+  <div class="tab" data-tab="episodes" onclick="showTab('episodes', this)">Episodes</div>
+  <div class="tab" data-tab="knowledge" onclick="showTab('knowledge', this)">Knowledge</div>
+  <div class="tab" data-tab="onboarding" onclick="showTab('onboarding', this)">Onboarding</div>
 </div>
 
 <div id="tab-overview" class="tab-content active">
@@ -225,46 +240,58 @@ DASHBOARD_HTML = """<!doctype html>
 </div>
 
 <div id="tab-chat" class="tab-content">
-  <div class="panel">
-    <h2>Agent Chat</h2>
-    <div class="form-grid">
-      <div>
-        <label for="chat-sender">Sender</label>
-        <input id="chat-sender" list="agent-ids" value="{{ default_onboarding_agent }}">
+  <div class="chat-shell">
+    <aside class="panel chat-sidebar">
+      <h2>Channels</h2>
+      <div class="muted">Switch channels like an IRC client. The active channel is reflected in the URL.</div>
+      <div id="chat-channel-tabs" class="chat-channel-tabs"></div>
+      <div class="form-grid" style="margin-bottom:0;">
+        <div>
+          <label for="chat-quick-channel">Open Channel</label>
+          <input id="chat-quick-channel" placeholder="general">
+        </div>
       </div>
-      <div>
-        <label for="chat-target">Target</label>
-        <input id="chat-target" list="agent-ids" placeholder="optional">
+      <div style="margin-top:10px;">
+        <button onclick="jumpToChatChannel()">Open</button>
       </div>
-      <div>
-        <label for="chat-channel">Channel</label>
-        <input id="chat-channel" value="general">
+    </aside>
+    <section class="chat-main">
+      <div class="panel">
+        <div class="chat-header-row">
+          <div>
+            <h2 id="chat-active-title">#all</h2>
+            <div id="chat-feed-status" class="api-status">Watching chat feed.</div>
+          </div>
+          <span id="chat-follow-state" class="chat-follow">Follow mode: on</span>
+        </div>
+        <div class="chat-toolbar">
+          <div>
+            <label for="chat-watch-agent">Highlight Agent</label>
+            <input id="chat-watch-agent" list="agent-ids" value="{{ default_onboarding_agent }}" placeholder="optional">
+          </div>
+          <div>
+            <label for="chat-channel">Post Channel</label>
+            <input id="chat-channel" value="{{ default_chat_channel if default_chat_channel != 'all' else 'general' }}">
+          </div>
+          <div>
+            <label for="chat-target">Target</label>
+            <input id="chat-target" list="agent-ids" placeholder="optional">
+          </div>
+          <div>
+            <label for="chat-sender">Sender</label>
+            <input id="chat-sender" list="agent-ids" value="{{ default_onboarding_agent }}">
+          </div>
+        </div>
+        <label for="chat-body">Message</label>
+        <textarea id="chat-body" placeholder="Write a handoff, coordination note, or question."></textarea>
+        <div style="margin-top:10px;">
+          <button onclick="sendChatMessage()">Send Message</button>
+          <span id="chat-status" class="api-status"></span>
+        </div>
       </div>
-    </div>
-    <label for="chat-body">Message</label>
-    <textarea id="chat-body" placeholder="Write a handoff, coordination note, or question."></textarea>
-    <div style="margin-top:10px;">
-      <button onclick="sendChatMessage()">Send Message</button>
-      <span id="chat-status" class="api-status"></span>
-    </div>
+      <div id="chat-feed" class="chat-feed"></div>
+    </section>
   </div>
-
-  <h2>Recent Messages</h2>
-  <div class="chat-toolbar">
-    <div>
-      <label for="chat-watch-channel">Watch Channel</label>
-      <input id="chat-watch-channel" value="{{ default_chat_channel }}" placeholder="all">
-    </div>
-    <div>
-      <label for="chat-watch-agent">Highlight Agent</label>
-      <input id="chat-watch-agent" list="agent-ids" value="{{ default_onboarding_agent }}" placeholder="optional">
-    </div>
-  </div>
-  <div class="chat-status-row">
-    <span id="chat-feed-status" class="api-status">Watching chat feed.</span>
-    <span id="chat-follow-state" class="chat-follow">Follow mode: on</span>
-  </div>
-  <div id="chat-feed" class="chat-feed"></div>
 </div>
 
 <div id="tab-agents" class="tab-content">
@@ -379,21 +406,47 @@ DASHBOARD_HTML = """<!doctype html>
 
 <script>
 const INITIAL_CHAT_MESSAGES = {{ chat_messages|tojson }};
+const INITIAL_CHAT_CHANNELS = {{ chat_channels|tojson }};
 const CHAT_POLL_INTERVAL_MS = 3000;
 const TAB_NAMES = ['overview', 'chat', 'agents', 'working', 'episodes', 'knowledge', 'onboarding'];
 const chatState = {
+  activeChannel: '{{ default_chat_channel|replace("'", "\\'") }}',
+  channelSummaries: INITIAL_CHAT_CHANNELS,
   follow: true,
+  hasOlder: INITIAL_CHAT_MESSAGES.length >= 100,
   latestId: INITIAL_CHAT_MESSAGES.length ? INITIAL_CHAT_MESSAGES[INITIAL_CHAT_MESSAGES.length - 1].id : 0,
+  loadingOlder: false,
+  messages: INITIAL_CHAT_MESSAGES,
+  oldestId: INITIAL_CHAT_MESSAGES.length ? INITIAL_CHAT_MESSAGES[0].id : 0,
+  pageSize: 100,
   pollHandle: null,
 };
 
-function getTabNameFromHash() {
-  const hash = window.location.hash.replace(/^#/, '').trim().toLowerCase();
-  return TAB_NAMES.includes(hash) ? hash : 'overview';
+function getHashState() {
+  const hash = window.location.hash.replace(/^#/, '').trim();
+  if (!hash) {
+    return { tab: 'overview', chatChannel: null };
+  }
+  const [rawTab, ...rest] = hash.split('/');
+  const tab = rawTab.toLowerCase();
+  if (!TAB_NAMES.includes(tab)) {
+    return { tab: 'overview', chatChannel: null };
+  }
+  return {
+    tab: tab,
+    chatChannel: tab === 'chat' && rest.length ? decodeURIComponent(rest.join('/')) : null
+  };
 }
 
 function findTabButton(name) {
-  return Array.from(document.querySelectorAll('.tab')).find((node) => node.textContent.trim().toLowerCase() === name);
+  return document.querySelector(`.tab[data-tab="${name}"]`);
+}
+
+function buildHash(name) {
+  if (name === 'chat' && chatState.activeChannel && chatState.activeChannel !== 'all') {
+    return 'chat/' + encodeURIComponent(chatState.activeChannel);
+  }
+  return name;
 }
 
 function showTab(name, el, options) {
@@ -403,10 +456,11 @@ function showTab(name, el, options) {
   document.getElementById('tab-' + name).classList.add('active');
   if (el) el.classList.add('active');
   if (setHash) {
-    window.location.hash = name;
+    window.location.hash = buildHash(name);
   }
   if (name === 'chat') {
     refreshChatFeed({ forceScroll: true });
+    refreshChatChannels();
   }
 }
 
@@ -462,6 +516,46 @@ function updateFollowStateLabel() {
   document.getElementById('chat-follow-state').textContent = 'Follow mode: ' + (chatState.follow ? 'on' : 'paused');
 }
 
+function setActiveChatChannel(channel, options) {
+  const nextChannel = (channel || 'all').trim() || 'all';
+  chatState.activeChannel = nextChannel;
+  document.getElementById('chat-quick-channel').value = nextChannel === 'all' ? '' : nextChannel;
+  document.getElementById('chat-channel').value = nextChannel === 'all' ? 'general' : nextChannel;
+  document.getElementById('chat-active-title').textContent = nextChannel === 'all' ? '#all channels' : ('#' + nextChannel);
+  resetChatStateForChannel();
+  renderChatChannelTabs();
+  if (!options || options.syncHash !== false) {
+    window.location.hash = buildHash('chat');
+  }
+  if (!options || options.refresh !== false) {
+    chatState.follow = true;
+    updateFollowStateLabel();
+    refreshChatFeed({ forceScroll: true });
+  }
+}
+
+function renderChatChannelTabs() {
+  const host = document.getElementById('chat-channel-tabs');
+  const totalMessages = chatState.channelSummaries.reduce((sum, item) => sum + (item.message_count || 0), 0);
+  const allTab = `
+    <button class="chat-channel-tab ${chatState.activeChannel === 'all' ? 'active' : ''}" type="button" data-channel="all">
+      <span class="chat-channel-name">#all</span>
+      <span class="chat-channel-count">${totalMessages}</span>
+    </button>
+  `;
+  const channelTabs = chatState.channelSummaries.map((item) => {
+    const channel = escapeHtml(item.channel);
+    const activeClass = item.channel === chatState.activeChannel ? 'active' : '';
+    return `
+      <button class="chat-channel-tab ${activeClass}" type="button" data-channel="${channel}">
+        <span class="chat-channel-name">#${channel}</span>
+        <span class="chat-channel-count">${item.message_count}</span>
+      </button>
+    `;
+  }).join('');
+  host.innerHTML = allTab + channelTabs;
+}
+
 function renderChatMessages(messages) {
   const feed = getChatFeed();
   const watchAgent = document.getElementById('chat-watch-agent').value.trim().toLowerCase();
@@ -478,13 +572,16 @@ function renderChatMessages(messages) {
     const created = escapeHtml(msg.created_at);
     const isSelf = watchAgent && sender.toLowerCase() === watchAgent;
     const cardClass = isSelf ? 'chat-message self' : 'chat-message remote';
+    const channelMeta = chatState.activeChannel === 'all'
+      ? `<button type="button" class="chat-channel-chip" data-channel="${channel}">${channel}</button>`
+      : `<span>${channel}</span>`;
     return `
       <article class="${cardClass}" data-message-id="${msg.id}">
         <div class="chat-meta">
           <strong class="agent">${sender}</strong>
           <span class="chat-target">to ${target}</span>
           <span>#${msg.id}</span>
-          <span>${channel}</span>
+          ${channelMeta}
           <span>${created}</span>
         </div>
         <div class="chat-text">${body}</div>
@@ -493,31 +590,140 @@ function renderChatMessages(messages) {
   }).join('');
 }
 
+function updateChatCursorState(messages) {
+  chatState.messages = messages;
+  chatState.latestId = messages.length ? messages[messages.length - 1].id : 0;
+  chatState.oldestId = messages.length ? messages[0].id : 0;
+}
+
+function bindChatChannelClicks() {
+  document.getElementById('chat-channel-tabs').addEventListener('click', (event) => {
+    const target = event.target.closest('[data-channel]');
+    if (!target) {
+      return;
+    }
+    setActiveChatChannel(target.dataset.channel || 'all');
+  });
+
+  getChatFeed().addEventListener('click', (event) => {
+    const target = event.target.closest('.chat-channel-chip[data-channel]');
+    if (!target) {
+      return;
+    }
+    setActiveChatChannel(target.dataset.channel || 'all');
+  });
+}
+
+function resetChatStateForChannel() {
+  chatState.messages = [];
+  chatState.latestId = 0;
+  chatState.oldestId = 0;
+  chatState.hasOlder = true;
+  chatState.loadingOlder = false;
+  const feed = getChatFeed();
+  delete feed.dataset.initialized;
+}
+
+async function fetchChatMessages(params) {
+  const query = new URLSearchParams();
+  query.set('limit', String(params && params.limit ? params.limit : chatState.pageSize));
+  const channel = chatState.activeChannel || 'all';
+  if (channel && channel.toLowerCase() !== 'all') {
+    query.set('channel', channel);
+  }
+  if (params && params.since) {
+    query.set('since', String(params.since));
+  }
+  if (params && params.before) {
+    query.set('before', String(params.before));
+  }
+  const res = await fetch('/api/chat?' + query.toString());
+  const payload = await res.json();
+  if (!res.ok) {
+    throw new Error(payload.error || ('HTTP ' + res.status));
+  }
+  return payload;
+}
+
+async function refreshChatChannels() {
+  try {
+    const res = await fetch('/api/chat/channels?limit=30');
+    const payload = await res.json();
+    if (!res.ok) throw new Error(payload.error || ('HTTP ' + res.status));
+    chatState.channelSummaries = payload;
+    renderChatChannelTabs();
+  } catch (_err) {
+    renderChatChannelTabs();
+  }
+}
+
 async function refreshChatFeed(options) {
   const forceScroll = options && options.forceScroll;
   const feed = getChatFeed();
   const status = document.getElementById('chat-feed-status');
   const previousScrollBottomOffset = feed.scrollHeight - feed.scrollTop;
   const wasNearBottom = forceScroll || isNearBottom(feed) || feed.dataset.initialized !== 'true';
-  const channel = document.getElementById('chat-watch-channel').value.trim();
-  const params = new URLSearchParams({ limit: '100' });
-  if (channel && channel.toLowerCase() !== 'all') {
-    params.set('channel', channel);
-  }
+  const channel = chatState.activeChannel || 'all';
 
   try {
-    const res = await fetch('/api/chat?' + params.toString());
-    const messages = await res.json();
-    if (!res.ok) throw new Error(messages.error || ('HTTP ' + res.status));
-    renderChatMessages(messages);
+    const messages = await fetchChatMessages({ limit: chatState.pageSize });
+    updateChatCursorState(messages);
+    chatState.hasOlder = messages.length >= chatState.pageSize;
+    renderChatMessages(chatState.messages);
     feed.dataset.initialized = 'true';
-    chatState.latestId = messages.length ? messages[messages.length - 1].id : 0;
     if (chatState.follow && wasNearBottom) {
       feed.scrollTop = feed.scrollHeight;
     } else if (!chatState.follow) {
       feed.scrollTop = Math.max(0, feed.scrollHeight - previousScrollBottomOffset);
     }
-    status.textContent = `Watching ${channel && channel.toLowerCase() !== 'all' ? ('channel ' + channel) : 'all channels'} | ${messages.length} message(s) loaded.`;
+    status.textContent = `Watching ${channel && channel.toLowerCase() !== 'all' ? ('channel ' + channel) : 'all channels'} | ${chatState.messages.length} message(s) loaded.`;
+  } catch (err) {
+    status.textContent = 'Chat refresh failed: ' + err.message;
+  }
+}
+
+async function loadOlderChatMessages() {
+  if (chatState.loadingOlder || !chatState.hasOlder || !chatState.oldestId) {
+    return;
+  }
+  const feed = getChatFeed();
+  const previousHeight = feed.scrollHeight;
+  const previousTop = feed.scrollTop;
+  chatState.loadingOlder = true;
+  try {
+    const older = await fetchChatMessages({ before: chatState.oldestId, limit: chatState.pageSize });
+    if (!older.length) {
+      chatState.hasOlder = false;
+      return;
+    }
+    updateChatCursorState(older.concat(chatState.messages));
+    chatState.hasOlder = older.length >= chatState.pageSize;
+    renderChatMessages(chatState.messages);
+    feed.scrollTop = feed.scrollHeight - previousHeight + previousTop;
+  } finally {
+    chatState.loadingOlder = false;
+  }
+}
+
+async function refreshLatestChatMessages() {
+  const feed = getChatFeed();
+  const status = document.getElementById('chat-feed-status');
+  const channel = chatState.activeChannel || 'all';
+  const previousScrollBottomOffset = feed.scrollHeight - feed.scrollTop;
+  const wasNearBottom = isNearBottom(feed) || feed.dataset.initialized !== 'true';
+  try {
+    const newer = await fetchChatMessages({ since: chatState.latestId, limit: chatState.pageSize });
+    if (newer.length) {
+      updateChatCursorState(chatState.messages.concat(newer));
+      renderChatMessages(chatState.messages);
+    }
+    feed.dataset.initialized = 'true';
+    if (chatState.follow && wasNearBottom) {
+      feed.scrollTop = feed.scrollHeight;
+    } else if (!chatState.follow) {
+      feed.scrollTop = Math.max(0, feed.scrollHeight - previousScrollBottomOffset);
+    }
+    status.textContent = `Watching ${channel && channel.toLowerCase() !== 'all' ? ('channel ' + channel) : 'all channels'} | ${chatState.messages.length} message(s) loaded.`;
   } catch (err) {
     status.textContent = 'Chat refresh failed: ' + err.message;
   }
@@ -527,6 +733,9 @@ function onChatFeedScroll() {
   const feed = getChatFeed();
   chatState.follow = isNearBottom(feed);
   updateFollowStateLabel();
+  if (feed.scrollTop < 24) {
+    loadOlderChatMessages();
+  }
 }
 
 function startChatPolling() {
@@ -535,7 +744,7 @@ function startChatPolling() {
   }
   chatState.pollHandle = setInterval(() => {
     if (!document.hidden && isChatTabActive()) {
-      refreshChatFeed();
+      refreshLatestChatMessages();
     }
   }, CHAT_POLL_INTERVAL_MS);
 }
@@ -543,7 +752,7 @@ function startChatPolling() {
 async function sendChatMessage() {
   const sender = document.getElementById('chat-sender').value.trim();
   const target = document.getElementById('chat-target').value.trim();
-  const channel = document.getElementById('chat-channel').value.trim() || 'general';
+  const channel = document.getElementById('chat-channel').value.trim() || (chatState.activeChannel !== 'all' ? chatState.activeChannel : 'general');
   const body = document.getElementById('chat-body').value.trim();
   const status = document.getElementById('chat-status');
   if (!sender || !body) {
@@ -560,18 +769,29 @@ async function sendChatMessage() {
     });
     status.textContent = 'Message stored.';
     document.getElementById('chat-body').value = '';
-    document.getElementById('chat-watch-channel').value = channel;
+    setActiveChatChannel(channel, { refresh: false });
     chatState.follow = true;
     updateFollowStateLabel();
-    await refreshChatFeed({ forceScroll: true });
+    await Promise.all([
+      refreshChatChannels(),
+      refreshChatFeed({ forceScroll: true })
+    ]);
   } catch (err) {
     status.textContent = err.message;
   }
 }
 
+function jumpToChatChannel() {
+  const value = document.getElementById('chat-quick-channel').value.trim() || 'all';
+  setActiveChatChannel(value);
+}
+
 function syncTabFromHash() {
-  const tabName = getTabNameFromHash();
-  showTab(tabName, findTabButton(tabName), { setHash: false });
+  const hashState = getHashState();
+  if (hashState.tab === 'chat' && hashState.chatChannel) {
+    setActiveChatChannel(hashState.chatChannel, { refresh: false, syncHash: false });
+  }
+  showTab(hashState.tab, findTabButton(hashState.tab), { setHash: false });
 }
 
 async function loadOnboardingPrompt() {
@@ -589,23 +809,21 @@ async function loadOnboardingPrompt() {
   }
 }
 
-document.getElementById('chat-watch-channel').addEventListener('change', () => {
-  chatState.follow = true;
-  updateFollowStateLabel();
-  refreshChatFeed({ forceScroll: true });
-});
 document.getElementById('chat-watch-agent').addEventListener('change', () => {
-  refreshChatFeed();
+  renderChatMessages(chatState.messages);
 });
 getChatFeed().addEventListener('scroll', onChatFeedScroll);
 window.addEventListener('hashchange', syncTabFromHash);
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden && isChatTabActive()) {
-    refreshChatFeed();
+    refreshLatestChatMessages();
   }
 });
 
-renderChatMessages(INITIAL_CHAT_MESSAGES);
+renderChatChannelTabs();
+renderChatMessages(chatState.messages);
+bindChatChannelClicks();
+refreshChatChannels();
 refreshChatFeed({ forceScroll: true });
 startChatPolling();
 updateFollowStateLabel();
@@ -655,6 +873,7 @@ def dashboard():
         tasks=mem.list_tasks(include_done=False, limit=20),
         events=mem.get_latest_events(limit=30),
         chat_messages=mem.get_chat_messages(limit=50),
+        chat_channels=mem.list_chat_channels(limit=20),
         agent_profiles=agent_profiles,
         sessions=sessions[:20],
         wm_by_agent=wm_by_agent,
@@ -709,16 +928,27 @@ def api_onboarding(agent_id=None):
 @app.route("/api/chat", methods=["GET"])
 def api_chat_list():
     since = request.args.get("since", "0")
+    before = request.args.get("before", "0")
     try:
         since_id = int(since)
     except ValueError:
         since_id = 0
+    try:
+        before_id = int(before)
+    except ValueError:
+        before_id = 0
     return jsonify(mem.get_chat_messages(
         channel=request.args.get("channel"),
         agent_id=request.args.get("agent_id"),
         since_id=since_id,
+        before_id=before_id,
         limit=_parse_int_arg("limit", 100),
     ))
+
+
+@app.route("/api/chat/channels", methods=["GET"])
+def api_chat_channels():
+    return jsonify(mem.list_chat_channels(limit=_parse_int_arg("limit", 30)))
 
 
 @app.route("/api/chat", methods=["POST"])

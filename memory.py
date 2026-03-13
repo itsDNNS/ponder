@@ -541,24 +541,62 @@ class AgentMemory:
             conn.commit()
             return cur.lastrowid
 
-    def get_chat_messages(self, channel=None, agent_id=None, since_id=0, limit=100):
-        """Fetch chat messages, optionally filtered by channel or agent visibility."""
-        query = "SELECT * FROM chat_messages WHERE id > ?"
-        params = [since_id]
+    def get_chat_messages(
+        self, channel=None, agent_id=None, since_id=0, before_id=0, limit=100
+    ):
+        """Fetch chat messages, optionally filtered by channel or agent visibility.
+
+        If both ``before_id`` and ``since_id`` are provided, ``before_id`` wins.
+        That keeps pagination deterministic for scrollback requests.
+        """
+        query = "SELECT * FROM chat_messages WHERE 1=1"
+        params = []
+        if before_id:
+            query += " AND id < ?"
+            params.append(before_id)
+        elif since_id:
+            query += " AND id > ?"
+            params.append(since_id)
         if channel:
             query += " AND channel = ?"
             params.append(channel)
         if agent_id:
             query += " AND (sender_agent = ? OR target_agent = ? OR target_agent IS NULL)"
             params.extend([agent_id, agent_id])
-        query += " ORDER BY id ASC LIMIT ?"
+        if before_id:
+            query += " ORDER BY id DESC LIMIT ?"
+        elif since_id:
+            query += " ORDER BY id ASC LIMIT ?"
+        else:
+            query += " ORDER BY id DESC LIMIT ?"
         params.append(limit)
         with self._connect() as conn:
             rows = conn.execute(query, params).fetchall()
             messages = [dict(r) for r in rows]
+        if not since_id:
+            messages.reverse()
         for message in messages:
             message["metadata"] = self._json_load(message.get("metadata"), default={})
         return messages
+
+    def list_chat_channels(self, limit=50):
+        """Return chat channels ordered by latest activity with message counts."""
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT
+                    channel,
+                    COUNT(*) AS message_count,
+                    MAX(id) AS last_message_id,
+                    MAX(created_at) AS last_created_at
+                FROM chat_messages
+                GROUP BY channel
+                ORDER BY last_message_id DESC
+                LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+            return [dict(r) for r in rows]
 
     def handoff(self, from_agent, to_agent, title, description=None, payload=None):
         """Create a task handoff from one agent to another and log it."""

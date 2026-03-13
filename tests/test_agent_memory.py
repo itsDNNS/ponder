@@ -123,6 +123,60 @@ class AgentMemoryFeatureTests(unittest.TestCase):
         self.assertEqual(len(payload), 1)
         self.assertEqual(payload[0]["body"], "hello")
 
+    def test_chat_before_query_returns_older_messages(self):
+        first = self.mem.append_chat_message(
+            sender_agent="codex",
+            target_agent="nova",
+            channel="general",
+            body="one",
+        )
+        second = self.mem.append_chat_message(
+            sender_agent="codex",
+            target_agent="nova",
+            channel="general",
+            body="two",
+        )
+        third = self.mem.append_chat_message(
+            sender_agent="codex",
+            target_agent="nova",
+            channel="general",
+            body="three",
+        )
+
+        response = self.client.get(f"/api/chat?channel=general&before={third}&limit=2")
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertEqual([msg["id"] for msg in payload], [first, second])
+        self.assertEqual(payload[-1]["body"], "two")
+
+    def test_chat_channel_api_returns_ordered_channel_summaries(self):
+        self.mem.append_chat_message(
+            sender_agent="codex",
+            target_agent="Claude",
+            channel="docsight",
+            body="sync status",
+        )
+        self.mem.append_chat_message(
+            sender_agent="claude",
+            target_agent="codex",
+            channel="docsight",
+            body="reply",
+        )
+        self.mem.append_chat_message(
+            sender_agent="nova",
+            target_agent="codex",
+            channel="general",
+            body="hello",
+        )
+
+        response = self.client.get("/api/chat/channels?limit=abc")
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertEqual(payload[0]["channel"], "general")
+        self.assertEqual(payload[0]["message_count"], 1)
+        self.assertEqual(payload[1]["channel"], "docsight")
+        self.assertEqual(payload[1]["message_count"], 2)
+
     def test_dashboard_contains_hash_addressable_chat_feed(self):
         self.mem.append_chat_message(
             sender_agent="codex",
@@ -131,15 +185,23 @@ class AgentMemoryFeatureTests(unittest.TestCase):
             body="sync status",
         )
 
-        response = self.client.get("/?chat_channel=docsight#chat")
+        response = self.client.get("/?chat_channel=docsight")
         self.assertEqual(response.status_code, 200)
         html = response.get_data(as_text=True)
         self.assertIn('id="chat-feed"', html)
-        self.assertIn('id="chat-watch-channel" value="docsight"', html)
-        self.assertIn('function syncTabFromHash()', html)
-        self.assertIn('function isChatTabActive()', html)
-        self.assertIn('previousScrollBottomOffset', html)
-        self.assertIn("window.location.hash = name;", html)
+        self.assertIn('id="chat-channel-tabs"', html)
+        self.assertIn('id="chat-active-title"', html)
+        self.assertIn('id="chat-channel" value="docsight"', html)
+        self.assertIn("const INITIAL_CHAT_CHANNELS =", html)
+        self.assertIn("function loadOlderChatMessages()", html)
+        self.assertIn("query.set('before'", html)
+        self.assertIn("function getHashState()", html)
+        self.assertIn("window.location.hash = buildHash(name);", html)
+        self.assertIn("chat/' + encodeURIComponent(chatState.activeChannel)", html)
+        self.assertIn('data-channel="${channel}"', html)
+        self.assertIn('data-channel="all"', html)
+        self.assertIn("function bindChatChannelClicks()", html)
+        self.assertNotIn("onclick=\"setActiveChatChannel(", html)
 
 
 if __name__ == "__main__":
