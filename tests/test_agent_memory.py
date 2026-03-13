@@ -105,6 +105,20 @@ class AgentMemoryFeatureTests(unittest.TestCase):
         self.assertEqual(messages[0]["target_agent"], "orbital")
         self.assertEqual(messages[0]["channel"], "handoff")
 
+    def test_invalid_limit_query_uses_default_instead_of_500(self):
+        self.mem.append_chat_message(
+            sender_agent="codex",
+            target_agent="nova",
+            channel="general",
+            body="hello",
+        )
+
+        response = self.client.get("/api/chat?limit=abc")
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertEqual(len(payload), 1)
+        self.assertEqual(payload[0]["body"], "hello")
+
 
 if __name__ == "__main__":
     unittest.main()
