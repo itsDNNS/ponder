@@ -123,6 +123,32 @@ class AgentMemoryFeatureTests(unittest.TestCase):
         self.assertEqual(len(payload), 1)
         self.assertEqual(payload[0]["body"], "hello")
 
+    def test_chat_before_query_returns_older_messages(self):
+        first = self.mem.append_chat_message(
+            sender_agent="codex",
+            target_agent="nova",
+            channel="general",
+            body="one",
+        )
+        second = self.mem.append_chat_message(
+            sender_agent="codex",
+            target_agent="nova",
+            channel="general",
+            body="two",
+        )
+        third = self.mem.append_chat_message(
+            sender_agent="codex",
+            target_agent="nova",
+            channel="general",
+            body="three",
+        )
+
+        response = self.client.get(f"/api/chat?channel=general&before={third}&limit=2")
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertEqual([msg["id"] for msg in payload], [first, second])
+        self.assertEqual(payload[-1]["body"], "two")
+
     def test_chat_channel_api_returns_ordered_channel_summaries(self):
         self.mem.append_chat_message(
             sender_agent="codex",
@@ -167,6 +193,8 @@ class AgentMemoryFeatureTests(unittest.TestCase):
         self.assertIn('id="chat-active-title"', html)
         self.assertIn('id="chat-channel" value="docsight"', html)
         self.assertIn("const INITIAL_CHAT_CHANNELS =", html)
+        self.assertIn("function loadOlderChatMessages()", html)
+        self.assertIn("query.set('before'", html)
         self.assertIn("function getHashState()", html)
         self.assertIn("window.location.hash = buildHash(name);", html)
         self.assertIn("chat/' + encodeURIComponent(chatState.activeChannel)", html)

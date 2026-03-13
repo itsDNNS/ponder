@@ -413,8 +413,12 @@ const chatState = {
   activeChannel: '{{ default_chat_channel|replace("'", "\\'") }}',
   channelSummaries: INITIAL_CHAT_CHANNELS,
   follow: true,
+  hasOlder: INITIAL_CHAT_MESSAGES.length >= 100,
   latestId: INITIAL_CHAT_MESSAGES.length ? INITIAL_CHAT_MESSAGES[INITIAL_CHAT_MESSAGES.length - 1].id : 0,
-  limit: 300,
+  loadingOlder: false,
+  messages: INITIAL_CHAT_MESSAGES,
+  oldestId: INITIAL_CHAT_MESSAGES.length ? INITIAL_CHAT_MESSAGES[0].id : 0,
+  pageSize: 100,
   pollHandle: null,
 };
 
@@ -518,6 +522,7 @@ function setActiveChatChannel(channel, options) {
   document.getElementById('chat-quick-channel').value = nextChannel === 'all' ? '' : nextChannel;
   document.getElementById('chat-channel').value = nextChannel === 'all' ? 'general' : nextChannel;
   document.getElementById('chat-active-title').textContent = nextChannel === 'all' ? '#all channels' : ('#' + nextChannel);
+  resetChatStateForChannel();
   renderChatChannelTabs();
   if (!options || options.syncHash !== false) {
     window.location.hash = buildHash('chat');
@@ -585,6 +590,43 @@ function renderChatMessages(messages) {
   }).join('');
 }
 
+function updateChatCursorState(messages) {
+  chatState.messages = messages;
+  chatState.latestId = messages.length ? messages[messages.length - 1].id : 0;
+  chatState.oldestId = messages.length ? messages[0].id : 0;
+}
+
+function resetChatStateForChannel() {
+  chatState.messages = [];
+  chatState.latestId = 0;
+  chatState.oldestId = 0;
+  chatState.hasOlder = true;
+  chatState.loadingOlder = false;
+  const feed = getChatFeed();
+  delete feed.dataset.initialized;
+}
+
+async function fetchChatMessages(params) {
+  const query = new URLSearchParams();
+  query.set('limit', String(params && params.limit ? params.limit : chatState.pageSize));
+  const channel = chatState.activeChannel || 'all';
+  if (channel && channel.toLowerCase() !== 'all') {
+    query.set('channel', channel);
+  }
+  if (params && params.since) {
+    query.set('since', String(params.since));
+  }
+  if (params && params.before) {
+    query.set('before', String(params.before));
+  }
+  const res = await fetch('/api/chat?' + query.toString());
+  const payload = await res.json();
+  if (!res.ok) {
+    throw new Error(payload.error || ('HTTP ' + res.status));
+  }
+  return payload;
+}
+
 async function refreshChatChannels() {
   try {
     const res = await fetch('/api/chat/channels?limit=30');
@@ -604,24 +646,66 @@ async function refreshChatFeed(options) {
   const previousScrollBottomOffset = feed.scrollHeight - feed.scrollTop;
   const wasNearBottom = forceScroll || isNearBottom(feed) || feed.dataset.initialized !== 'true';
   const channel = chatState.activeChannel || 'all';
-  const params = new URLSearchParams({ limit: String(chatState.limit) });
-  if (channel && channel.toLowerCase() !== 'all') {
-    params.set('channel', channel);
-  }
 
   try {
-    const res = await fetch('/api/chat?' + params.toString());
-    const messages = await res.json();
-    if (!res.ok) throw new Error(messages.error || ('HTTP ' + res.status));
-    renderChatMessages(messages);
+    const messages = await fetchChatMessages({ limit: chatState.pageSize });
+    updateChatCursorState(messages);
+    chatState.hasOlder = messages.length >= chatState.pageSize;
+    renderChatMessages(chatState.messages);
     feed.dataset.initialized = 'true';
-    chatState.latestId = messages.length ? messages[messages.length - 1].id : 0;
     if (chatState.follow && wasNearBottom) {
       feed.scrollTop = feed.scrollHeight;
     } else if (!chatState.follow) {
       feed.scrollTop = Math.max(0, feed.scrollHeight - previousScrollBottomOffset);
     }
-    status.textContent = `Watching ${channel && channel.toLowerCase() !== 'all' ? ('channel ' + channel) : 'all channels'} | ${messages.length} message(s) loaded.`;
+    status.textContent = `Watching ${channel && channel.toLowerCase() !== 'all' ? ('channel ' + channel) : 'all channels'} | ${chatState.messages.length} message(s) loaded.`;
+  } catch (err) {
+    status.textContent = 'Chat refresh failed: ' + err.message;
+  }
+}
+
+async function loadOlderChatMessages() {
+  if (chatState.loadingOlder || !chatState.hasOlder || !chatState.oldestId) {
+    return;
+  }
+  const feed = getChatFeed();
+  const previousHeight = feed.scrollHeight;
+  const previousTop = feed.scrollTop;
+  chatState.loadingOlder = true;
+  try {
+    const older = await fetchChatMessages({ before: chatState.oldestId, limit: chatState.pageSize });
+    if (!older.length) {
+      chatState.hasOlder = false;
+      return;
+    }
+    updateChatCursorState(older.concat(chatState.messages));
+    chatState.hasOlder = older.length >= chatState.pageSize;
+    renderChatMessages(chatState.messages);
+    feed.scrollTop = feed.scrollHeight - previousHeight + previousTop;
+  } finally {
+    chatState.loadingOlder = false;
+  }
+}
+
+async function refreshLatestChatMessages() {
+  const feed = getChatFeed();
+  const status = document.getElementById('chat-feed-status');
+  const channel = chatState.activeChannel || 'all';
+  const previousScrollBottomOffset = feed.scrollHeight - feed.scrollTop;
+  const wasNearBottom = isNearBottom(feed) || feed.dataset.initialized !== 'true';
+  try {
+    const newer = await fetchChatMessages({ since: chatState.latestId, limit: chatState.pageSize });
+    if (newer.length) {
+      updateChatCursorState(chatState.messages.concat(newer));
+      renderChatMessages(chatState.messages);
+    }
+    feed.dataset.initialized = 'true';
+    if (chatState.follow && wasNearBottom) {
+      feed.scrollTop = feed.scrollHeight;
+    } else if (!chatState.follow) {
+      feed.scrollTop = Math.max(0, feed.scrollHeight - previousScrollBottomOffset);
+    }
+    status.textContent = `Watching ${channel && channel.toLowerCase() !== 'all' ? ('channel ' + channel) : 'all channels'} | ${chatState.messages.length} message(s) loaded.`;
   } catch (err) {
     status.textContent = 'Chat refresh failed: ' + err.message;
   }
@@ -631,6 +715,9 @@ function onChatFeedScroll() {
   const feed = getChatFeed();
   chatState.follow = isNearBottom(feed);
   updateFollowStateLabel();
+  if (feed.scrollTop < 24) {
+    loadOlderChatMessages();
+  }
 }
 
 function startChatPolling() {
@@ -639,7 +726,7 @@ function startChatPolling() {
   }
   chatState.pollHandle = setInterval(() => {
     if (!document.hidden && isChatTabActive()) {
-      refreshChatFeed();
+      refreshLatestChatMessages();
     }
   }, CHAT_POLL_INTERVAL_MS);
 }
@@ -705,18 +792,18 @@ async function loadOnboardingPrompt() {
 }
 
 document.getElementById('chat-watch-agent').addEventListener('change', () => {
-  refreshChatFeed();
+  renderChatMessages(chatState.messages);
 });
 getChatFeed().addEventListener('scroll', onChatFeedScroll);
 window.addEventListener('hashchange', syncTabFromHash);
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden && isChatTabActive()) {
-    refreshChatFeed();
+    refreshLatestChatMessages();
   }
 });
 
 renderChatChannelTabs();
-renderChatMessages(INITIAL_CHAT_MESSAGES);
+renderChatMessages(chatState.messages);
 refreshChatChannels();
 refreshChatFeed({ forceScroll: true });
 startChatPolling();
@@ -822,14 +909,20 @@ def api_onboarding(agent_id=None):
 @app.route("/api/chat", methods=["GET"])
 def api_chat_list():
     since = request.args.get("since", "0")
+    before = request.args.get("before", "0")
     try:
         since_id = int(since)
     except ValueError:
         since_id = 0
+    try:
+        before_id = int(before)
+    except ValueError:
+        before_id = 0
     return jsonify(mem.get_chat_messages(
         channel=request.args.get("channel"),
         agent_id=request.args.get("agent_id"),
         since_id=since_id,
+        before_id=before_id,
         limit=_parse_int_arg("limit", 100),
     ))
 
