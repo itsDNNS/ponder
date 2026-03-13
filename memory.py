@@ -541,21 +541,36 @@ class AgentMemory:
             conn.commit()
             return cur.lastrowid
 
-    def get_chat_messages(self, channel=None, agent_id=None, since_id=0, limit=100):
+    def get_chat_messages(
+        self, channel=None, agent_id=None, since_id=0, before_id=0, limit=100
+    ):
         """Fetch chat messages, optionally filtered by channel or agent visibility."""
-        query = "SELECT * FROM chat_messages WHERE id > ?"
-        params = [since_id]
+        query = "SELECT * FROM chat_messages WHERE 1=1"
+        params = []
+        if before_id:
+            query += " AND id < ?"
+            params.append(before_id)
+        elif since_id:
+            query += " AND id > ?"
+            params.append(since_id)
         if channel:
             query += " AND channel = ?"
             params.append(channel)
         if agent_id:
             query += " AND (sender_agent = ? OR target_agent = ? OR target_agent IS NULL)"
             params.extend([agent_id, agent_id])
-        query += " ORDER BY id ASC LIMIT ?"
+        if before_id:
+            query += " ORDER BY id DESC LIMIT ?"
+        elif since_id:
+            query += " ORDER BY id ASC LIMIT ?"
+        else:
+            query += " ORDER BY id DESC LIMIT ?"
         params.append(limit)
         with self._connect() as conn:
             rows = conn.execute(query, params).fetchall()
             messages = [dict(r) for r in rows]
+        if not since_id:
+            messages.reverse()
         for message in messages:
             message["metadata"] = self._json_load(message.get("metadata"), default={})
         return messages
