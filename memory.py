@@ -560,6 +560,25 @@ class AgentMemory:
             message["metadata"] = self._json_load(message.get("metadata"), default={})
         return messages
 
+    def list_chat_channels(self, limit=50):
+        """Return chat channels ordered by latest activity with message counts."""
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT
+                    channel,
+                    COUNT(*) AS message_count,
+                    MAX(id) AS last_message_id,
+                    MAX(created_at) AS last_created_at
+                FROM chat_messages
+                GROUP BY channel
+                ORDER BY last_message_id DESC
+                LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+            return [dict(r) for r in rows]
+
     def handoff(self, from_agent, to_agent, title, description=None, payload=None):
         """Create a task handoff from one agent to another and log it."""
         task_id = self.create_task(
