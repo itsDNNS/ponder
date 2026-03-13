@@ -37,6 +37,10 @@ class AgentMemoryFeatureTests(unittest.TestCase):
         self.assertIn("Do not create or rely on ~/.claude/CLAUDE.md", data["prompt"])
         self.assertIn("/api/context/onboarding?agent_id=codex", data["prompt"])
 
+        uppercase = self.client.get("/api/onboarding/Codex").get_json()
+        self.assertEqual(uppercase["profile"]["agent_id"], "codex")
+        self.assertIn("/api/context/onboarding?agent_id=codex", uppercase["prompt"])
+
         generic = self.client.get("/api/onboarding/orbital").get_json()
         self.assertEqual(generic["profile"]["agent_id"], "orbital")
         self.assertIn("Do not create configuration files for unrelated agent ecosystems", generic["prompt"])
