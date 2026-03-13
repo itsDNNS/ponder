@@ -123,6 +123,24 @@ class AgentMemoryFeatureTests(unittest.TestCase):
         self.assertEqual(len(payload), 1)
         self.assertEqual(payload[0]["body"], "hello")
 
+    def test_dashboard_contains_hash_addressable_chat_feed(self):
+        self.mem.append_chat_message(
+            sender_agent="codex",
+            target_agent="Claude",
+            channel="docsight",
+            body="sync status",
+        )
+
+        response = self.client.get("/?chat_channel=docsight#chat")
+        self.assertEqual(response.status_code, 200)
+        html = response.get_data(as_text=True)
+        self.assertIn('id="chat-feed"', html)
+        self.assertIn('id="chat-watch-channel" value="docsight"', html)
+        self.assertIn('function syncTabFromHash()', html)
+        self.assertIn('function isChatTabActive()', html)
+        self.assertIn('previousScrollBottomOffset', html)
+        self.assertIn("window.location.hash = name;", html)
+
 
 if __name__ == "__main__":
     unittest.main()

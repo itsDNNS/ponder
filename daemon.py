@@ -129,9 +129,19 @@ DASHBOARD_HTML = """<!doctype html>
   .chat-body { min-width: 360px; }
   .chat-target { color: #facc15; }
   .api-status { margin-top: 0.6em; color: #888; }
+  .chat-toolbar { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin-bottom: 12px; }
+  .chat-feed { background: #0f172a; border: 1px solid #23314f; border-radius: 8px; max-height: 58vh; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+  .chat-message { border: 1px solid #23314f; border-radius: 8px; padding: 10px 12px; background: #111b2f; }
+  .chat-message.self { border-color: #295d5a; background: #102326; }
+  .chat-message.remote { border-color: #2b395d; background: #111b2f; }
+  .chat-meta { display: flex; gap: 12px; flex-wrap: wrap; color: #8aa3d1; font-size: 0.9em; margin-bottom: 6px; }
+  .chat-text { white-space: pre-wrap; word-break: break-word; line-height: 1.45; }
+  .chat-status-row { display: flex; justify-content: space-between; gap: 12px; align-items: center; margin: 10px 0 6px 0; flex-wrap: wrap; }
+  .chat-follow { color: #8aa3d1; font-size: 0.9em; }
   @media (max-width: 760px) {
     body { margin: 1em; }
     th, td { padding: 6px 8px; }
+    .chat-feed { max-height: 50vh; }
   }
 </style>
 </head><body>
@@ -240,20 +250,21 @@ DASHBOARD_HTML = """<!doctype html>
   </div>
 
   <h2>Recent Messages</h2>
-  <table>
-    <tr><th>#</th><th>Time</th><th>Channel</th><th>From</th><th>To</th><th>Message</th></tr>
-    {% for msg in chat_messages %}
-    <tr>
-      <td>{{ msg.id }}</td>
-      <td>{{ msg.created_at }}</td>
-      <td>{{ msg.channel }}</td>
-      <td class="agent">{{ msg.sender_agent }}</td>
-      <td class="chat-target">{{ msg.target_agent or '*' }}</td>
-      <td class="chat-body">{{ msg.body }}</td>
-    </tr>
-    {% endfor %}
-    {% if not chat_messages %}<tr><td colspan="6" class="muted">No chat messages yet</td></tr>{% endif %}
-  </table>
+  <div class="chat-toolbar">
+    <div>
+      <label for="chat-watch-channel">Watch Channel</label>
+      <input id="chat-watch-channel" value="{{ default_chat_channel }}" placeholder="all">
+    </div>
+    <div>
+      <label for="chat-watch-agent">Highlight Agent</label>
+      <input id="chat-watch-agent" list="agent-ids" value="{{ default_onboarding_agent }}" placeholder="optional">
+    </div>
+  </div>
+  <div class="chat-status-row">
+    <span id="chat-feed-status" class="api-status">Watching chat feed.</span>
+    <span id="chat-follow-state" class="chat-follow">Follow mode: on</span>
+  </div>
+  <div id="chat-feed" class="chat-feed"></div>
 </div>
 
 <div id="tab-agents" class="tab-content">
@@ -367,11 +378,36 @@ DASHBOARD_HTML = """<!doctype html>
 </datalist>
 
 <script>
-function showTab(name, el) {
+const INITIAL_CHAT_MESSAGES = {{ chat_messages|tojson }};
+const CHAT_POLL_INTERVAL_MS = 3000;
+const TAB_NAMES = ['overview', 'chat', 'agents', 'working', 'episodes', 'knowledge', 'onboarding'];
+const chatState = {
+  follow: true,
+  latestId: INITIAL_CHAT_MESSAGES.length ? INITIAL_CHAT_MESSAGES[INITIAL_CHAT_MESSAGES.length - 1].id : 0,
+  pollHandle: null,
+};
+
+function getTabNameFromHash() {
+  const hash = window.location.hash.replace(/^#/, '').trim().toLowerCase();
+  return TAB_NAMES.includes(hash) ? hash : 'overview';
+}
+
+function findTabButton(name) {
+  return Array.from(document.querySelectorAll('.tab')).find((node) => node.textContent.trim().toLowerCase() === name);
+}
+
+function showTab(name, el, options) {
+  const setHash = !options || options.setHash !== false;
   document.querySelectorAll('.tab-content').forEach(node => node.classList.remove('active'));
   document.querySelectorAll('.tab').forEach(node => node.classList.remove('active'));
   document.getElementById('tab-' + name).classList.add('active');
   if (el) el.classList.add('active');
+  if (setHash) {
+    window.location.hash = name;
+  }
+  if (name === 'chat') {
+    refreshChatFeed({ forceScroll: true });
+  }
 }
 
 async function postJson(url, payload) {
@@ -400,6 +436,110 @@ function copyText(btn, id) {
   });
 }
 
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
+function getChatFeed() {
+  return document.getElementById('chat-feed');
+}
+
+function isChatTabActive() {
+  const tab = document.getElementById('tab-chat');
+  return tab && tab.classList.contains('active');
+}
+
+function isNearBottom(element) {
+  return (element.scrollHeight - element.scrollTop - element.clientHeight) < 24;
+}
+
+function updateFollowStateLabel() {
+  document.getElementById('chat-follow-state').textContent = 'Follow mode: ' + (chatState.follow ? 'on' : 'paused');
+}
+
+function renderChatMessages(messages) {
+  const feed = getChatFeed();
+  const watchAgent = document.getElementById('chat-watch-agent').value.trim().toLowerCase();
+  if (!messages.length) {
+    feed.innerHTML = '<div class="muted">No chat messages yet.</div>';
+    return;
+  }
+
+  feed.innerHTML = messages.map((msg) => {
+    const sender = escapeHtml(msg.sender_agent);
+    const target = escapeHtml(msg.target_agent || '*');
+    const body = escapeHtml(msg.body);
+    const channel = escapeHtml(msg.channel);
+    const created = escapeHtml(msg.created_at);
+    const isSelf = watchAgent && sender.toLowerCase() === watchAgent;
+    const cardClass = isSelf ? 'chat-message self' : 'chat-message remote';
+    return `
+      <article class="${cardClass}" data-message-id="${msg.id}">
+        <div class="chat-meta">
+          <strong class="agent">${sender}</strong>
+          <span class="chat-target">to ${target}</span>
+          <span>#${msg.id}</span>
+          <span>${channel}</span>
+          <span>${created}</span>
+        </div>
+        <div class="chat-text">${body}</div>
+      </article>
+    `;
+  }).join('');
+}
+
+async function refreshChatFeed(options) {
+  const forceScroll = options && options.forceScroll;
+  const feed = getChatFeed();
+  const status = document.getElementById('chat-feed-status');
+  const previousScrollBottomOffset = feed.scrollHeight - feed.scrollTop;
+  const wasNearBottom = forceScroll || isNearBottom(feed) || feed.dataset.initialized !== 'true';
+  const channel = document.getElementById('chat-watch-channel').value.trim();
+  const params = new URLSearchParams({ limit: '100' });
+  if (channel && channel.toLowerCase() !== 'all') {
+    params.set('channel', channel);
+  }
+
+  try {
+    const res = await fetch('/api/chat?' + params.toString());
+    const messages = await res.json();
+    if (!res.ok) throw new Error(messages.error || ('HTTP ' + res.status));
+    renderChatMessages(messages);
+    feed.dataset.initialized = 'true';
+    chatState.latestId = messages.length ? messages[messages.length - 1].id : 0;
+    if (chatState.follow && wasNearBottom) {
+      feed.scrollTop = feed.scrollHeight;
+    } else if (!chatState.follow) {
+      feed.scrollTop = Math.max(0, feed.scrollHeight - previousScrollBottomOffset);
+    }
+    status.textContent = `Watching ${channel && channel.toLowerCase() !== 'all' ? ('channel ' + channel) : 'all channels'} | ${messages.length} message(s) loaded.`;
+  } catch (err) {
+    status.textContent = 'Chat refresh failed: ' + err.message;
+  }
+}
+
+function onChatFeedScroll() {
+  const feed = getChatFeed();
+  chatState.follow = isNearBottom(feed);
+  updateFollowStateLabel();
+}
+
+function startChatPolling() {
+  if (chatState.pollHandle) {
+    clearInterval(chatState.pollHandle);
+  }
+  chatState.pollHandle = setInterval(() => {
+    if (!document.hidden && isChatTabActive()) {
+      refreshChatFeed();
+    }
+  }, CHAT_POLL_INTERVAL_MS);
+}
+
 async function sendChatMessage() {
   const sender = document.getElementById('chat-sender').value.trim();
   const target = document.getElementById('chat-target').value.trim();
@@ -420,10 +560,18 @@ async function sendChatMessage() {
     });
     status.textContent = 'Message stored.';
     document.getElementById('chat-body').value = '';
-    window.location.reload();
+    document.getElementById('chat-watch-channel').value = channel;
+    chatState.follow = true;
+    updateFollowStateLabel();
+    await refreshChatFeed({ forceScroll: true });
   } catch (err) {
     status.textContent = err.message;
   }
+}
+
+function syncTabFromHash() {
+  const tabName = getTabNameFromHash();
+  showTab(tabName, findTabButton(tabName), { setHash: false });
 }
 
 async function loadOnboardingPrompt() {
@@ -440,6 +588,28 @@ async function loadOnboardingPrompt() {
     status.textContent = err.message;
   }
 }
+
+document.getElementById('chat-watch-channel').addEventListener('change', () => {
+  chatState.follow = true;
+  updateFollowStateLabel();
+  refreshChatFeed({ forceScroll: true });
+});
+document.getElementById('chat-watch-agent').addEventListener('change', () => {
+  refreshChatFeed();
+});
+getChatFeed().addEventListener('scroll', onChatFeedScroll);
+window.addEventListener('hashchange', syncTabFromHash);
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && isChatTabActive()) {
+    refreshChatFeed();
+  }
+});
+
+renderChatMessages(INITIAL_CHAT_MESSAGES);
+refreshChatFeed({ forceScroll: true });
+startChatPolling();
+updateFollowStateLabel();
+syncTabFromHash();
 </script>
 </body></html>
 """
@@ -475,6 +645,7 @@ def dashboard():
     default_onboarding_agent = request.args.get("agent_id") or (
         agent_profiles[0]["agent_id"] if agent_profiles else "codex"
     )
+    default_chat_channel = request.args.get("chat_channel", "all")
     onboarding_bundle = mem.get_onboarding_bundle(default_onboarding_agent)
 
     return render_template_string(
@@ -491,6 +662,7 @@ def dashboard():
         all_knowledge=all_knowledge,
         pinned_notes=pinned_notes,
         default_onboarding_agent=default_onboarding_agent,
+        default_chat_channel=default_chat_channel,
         onboarding_bundle=onboarding_bundle,
     )
 
