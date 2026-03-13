@@ -198,6 +198,10 @@ class AgentMemoryFeatureTests(unittest.TestCase):
         self.assertIn("function getHashState()", html)
         self.assertIn("window.location.hash = buildHash(name);", html)
         self.assertIn("chat/' + encodeURIComponent(chatState.activeChannel)", html)
+        self.assertIn('data-channel="${channel}"', html)
+        self.assertIn('data-channel="all"', html)
+        self.assertIn("function bindChatChannelClicks()", html)
+        self.assertNotIn("onclick=\"setActiveChatChannel(", html)
 
 
 if __name__ == "__main__":

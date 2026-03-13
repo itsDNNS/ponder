@@ -538,7 +538,7 @@ function renderChatChannelTabs() {
   const host = document.getElementById('chat-channel-tabs');
   const totalMessages = chatState.channelSummaries.reduce((sum, item) => sum + (item.message_count || 0), 0);
   const allTab = `
-    <button class="chat-channel-tab ${chatState.activeChannel === 'all' ? 'active' : ''}" type="button" onclick="setActiveChatChannel('all')">
+    <button class="chat-channel-tab ${chatState.activeChannel === 'all' ? 'active' : ''}" type="button" data-channel="all">
       <span class="chat-channel-name">#all</span>
       <span class="chat-channel-count">${totalMessages}</span>
     </button>
@@ -547,7 +547,7 @@ function renderChatChannelTabs() {
     const channel = escapeHtml(item.channel);
     const activeClass = item.channel === chatState.activeChannel ? 'active' : '';
     return `
-      <button class="chat-channel-tab ${activeClass}" type="button" onclick="setActiveChatChannel('${channel.replaceAll("'", "\\'")}')">
+      <button class="chat-channel-tab ${activeClass}" type="button" data-channel="${channel}">
         <span class="chat-channel-name">#${channel}</span>
         <span class="chat-channel-count">${item.message_count}</span>
       </button>
@@ -573,7 +573,7 @@ function renderChatMessages(messages) {
     const isSelf = watchAgent && sender.toLowerCase() === watchAgent;
     const cardClass = isSelf ? 'chat-message self' : 'chat-message remote';
     const channelMeta = chatState.activeChannel === 'all'
-      ? `<button type="button" class="chat-channel-chip" onclick="setActiveChatChannel('${channel.replaceAll("'", "\\'")}')">${channel}</button>`
+      ? `<button type="button" class="chat-channel-chip" data-channel="${channel}">${channel}</button>`
       : `<span>${channel}</span>`;
     return `
       <article class="${cardClass}" data-message-id="${msg.id}">
@@ -594,6 +594,24 @@ function updateChatCursorState(messages) {
   chatState.messages = messages;
   chatState.latestId = messages.length ? messages[messages.length - 1].id : 0;
   chatState.oldestId = messages.length ? messages[0].id : 0;
+}
+
+function bindChatChannelClicks() {
+  document.getElementById('chat-channel-tabs').addEventListener('click', (event) => {
+    const target = event.target.closest('[data-channel]');
+    if (!target) {
+      return;
+    }
+    setActiveChatChannel(target.dataset.channel || 'all');
+  });
+
+  getChatFeed().addEventListener('click', (event) => {
+    const target = event.target.closest('.chat-channel-chip[data-channel]');
+    if (!target) {
+      return;
+    }
+    setActiveChatChannel(target.dataset.channel || 'all');
+  });
 }
 
 function resetChatStateForChannel() {
@@ -804,6 +822,7 @@ document.addEventListener('visibilitychange', () => {
 
 renderChatChannelTabs();
 renderChatMessages(chatState.messages);
+bindChatChannelClicks();
 refreshChatChannels();
 refreshChatFeed({ forceScroll: true });
 startChatPolling();
