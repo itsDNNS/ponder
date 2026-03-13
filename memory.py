@@ -544,7 +544,11 @@ class AgentMemory:
     def get_chat_messages(
         self, channel=None, agent_id=None, since_id=0, before_id=0, limit=100
     ):
-        """Fetch chat messages, optionally filtered by channel or agent visibility."""
+        """Fetch chat messages, optionally filtered by channel or agent visibility.
+
+        If both ``before_id`` and ``since_id`` are provided, ``before_id`` wins.
+        That keeps pagination deterministic for scrollback requests.
+        """
         query = "SELECT * FROM chat_messages WHERE 1=1"
         params = []
         if before_id:
