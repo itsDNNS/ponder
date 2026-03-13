@@ -14,12 +14,38 @@ Usage:
 import json
 import os
 import sqlite3
-import time
 import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
 
 DEFAULT_DB_PATH = Path(os.environ.get("AGENT_MEMORY_DB", str(Path.home() / ".openclaw" / "agent-memory" / "agent.db")))
+
+DEFAULT_AGENT_PROFILES = {
+    "claude": {
+        "display_name": "Claude",
+        "integration_mode": "native_or_file",
+        "integration_target": "Use Claude-native startup instructions or CLAUDE.md only when that runtime explicitly supports it.",
+        "native_feature": "Claude-compatible startup instructions",
+        "onboarding_note": "Do not create Codex- or Nova-specific config files. Stay inside Claude-supported mechanisms.",
+        "metadata": {"builtin": True},
+    },
+    "codex": {
+        "display_name": "Codex",
+        "integration_mode": "native",
+        "integration_target": "Use Codex developer instructions, AGENTS.md, config.toml, or the host's Codex-native startup feature.",
+        "native_feature": "Codex native instruction stack",
+        "onboarding_note": "Do not create or rely on ~/.claude/CLAUDE.md. Use Codex-native features instead.",
+        "metadata": {"builtin": True},
+    },
+    "nova": {
+        "display_name": "Nova",
+        "integration_mode": "native",
+        "integration_target": "Use Nova's own persistent agent configuration or host-managed startup prompt.",
+        "native_feature": "Nova native startup configuration",
+        "onboarding_note": "Do not borrow file conventions from other agents. Keep onboarding inside Nova's own mechanism.",
+        "metadata": {"builtin": True},
+    },
+}
 
 SCHEMA = """
 PRAGMA journal_mode = WAL;
@@ -63,6 +89,31 @@ CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status, priority DESC, crea
 CREATE INDEX IF NOT EXISTS idx_tasks_assigned ON tasks(assigned_to, status);
 CREATE INDEX IF NOT EXISTS idx_events_type ON events(event_type, created_at);
 CREATE INDEX IF NOT EXISTS idx_events_source ON events(source_agent, created_at);
+
+CREATE TABLE IF NOT EXISTS agent_profiles (
+    agent_id TEXT PRIMARY KEY,
+    display_name TEXT,
+    integration_mode TEXT NOT NULL DEFAULT 'native_or_session_bootstrap',
+    integration_target TEXT,
+    native_feature TEXT,
+    onboarding_note TEXT,
+    metadata TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS chat_messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    channel TEXT NOT NULL DEFAULT 'general',
+    sender_agent TEXT NOT NULL,
+    target_agent TEXT,
+    body TEXT NOT NULL,
+    metadata TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_chat_channel ON chat_messages(channel, id);
+CREATE INDEX IF NOT EXISTS idx_chat_target ON chat_messages(target_agent, id);
 
 -- ── Three-Tier Memory ────────────────────────────────────
 
@@ -142,7 +193,14 @@ class AgentMemory:
         self._init_db()
 
     def _connect(self):
-        conn = sqlite3.connect(self.db_path, timeout=5.0)
+        class ManagedConnection(sqlite3.Connection):
+            def __exit__(self, exc_type, exc_val, exc_tb):
+                try:
+                    return super().__exit__(exc_type, exc_val, exc_tb)
+                finally:
+                    self.close()
+
+        conn = sqlite3.connect(self.db_path, timeout=5.0, factory=ManagedConnection)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA journal_mode = WAL")
         conn.execute("PRAGMA busy_timeout = 5000")
@@ -152,6 +210,56 @@ class AgentMemory:
     def _init_db(self):
         with self._connect() as conn:
             conn.executescript(SCHEMA)
+
+    def _json_load(self, value, default=None):
+        if value is None:
+            return {} if default is None else default
+        if isinstance(value, (dict, list)):
+            return value
+        try:
+            return json.loads(value)
+        except (json.JSONDecodeError, TypeError):
+            return {} if default is None else default
+
+    def _default_agent_profile(self, agent_id):
+        agent_key = (agent_id or "agent").strip() or "agent"
+        profile = DEFAULT_AGENT_PROFILES.get(agent_key.lower())
+        if profile:
+            return {
+                "agent_id": agent_key,
+                **profile,
+                "metadata": dict(profile.get("metadata") or {}),
+            }
+        return {
+            "agent_id": agent_key,
+            "display_name": agent_key,
+            "integration_mode": "native_or_session_bootstrap",
+            "integration_target": "Use the agent's own native persistent instructions, startup hooks, or host-managed developer instructions when available.",
+            "native_feature": "Agent-native startup instructions or hooks",
+            "onboarding_note": "Do not create configuration files for unrelated agent ecosystems. If no native feature exists, run the bootstrap at the start of each session.",
+            "metadata": {"builtin": False, "auto_generated": True},
+        }
+
+    def _merge_agent_profile(self, row, include_state=True, requested_agent_id=None):
+        base = self._default_agent_profile(row["agent_id"] if row else requested_agent_id)
+        if row:
+            merged = {
+                **base,
+                "agent_id": row["agent_id"],
+                "display_name": row["display_name"] or base["display_name"],
+                "integration_mode": row["integration_mode"] or base["integration_mode"],
+                "integration_target": row["integration_target"] or base["integration_target"],
+                "native_feature": row["native_feature"] or base["native_feature"],
+                "onboarding_note": row["onboarding_note"] or base["onboarding_note"],
+                "metadata": self._json_load(row["metadata"], default={}) or base["metadata"],
+                "created_at": row["created_at"],
+                "updated_at": row["updated_at"],
+            }
+        else:
+            merged = base
+        if include_state:
+            merged["state"] = self.get_state(merged["agent_id"])
+        return merged
 
     # ── Agent State ──────────────────────────────────────────
 
@@ -187,6 +295,80 @@ class AgentMemory:
             conn.commit()
 
     # ── Task Queue ───────────────────────────────────────────
+
+    # -- Agent Profiles ---------------------------------------------------
+
+    def get_agent_profile(self, agent_id, include_state=True):
+        """Get a merged agent profile, including built-in defaults."""
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM agent_profiles WHERE agent_id = ?",
+                (agent_id,),
+            ).fetchone()
+        return self._merge_agent_profile(row, include_state=include_state, requested_agent_id=agent_id)
+
+    def list_agent_profiles(self, include_state=True):
+        """List known agent profiles plus built-in defaults and observed agents."""
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT * FROM agent_profiles ORDER BY agent_id"
+            ).fetchall()
+            state_rows = conn.execute(
+                "SELECT agent_id FROM agent_state ORDER BY agent_id"
+            ).fetchall()
+        row_map = {row["agent_id"]: row for row in rows}
+        agent_ids = set(row_map)
+        agent_ids.update(DEFAULT_AGENT_PROFILES)
+        agent_ids.update(row["agent_id"] for row in state_rows)
+        return [
+            self._merge_agent_profile(
+                row_map.get(agent_id),
+                include_state=include_state,
+                requested_agent_id=agent_id,
+            )
+            for agent_id in sorted(agent_ids)
+        ]
+
+    def upsert_agent_profile(self, agent_id, display_name=None, integration_mode=None,
+                             integration_target=None, native_feature=None,
+                             onboarding_note=None, metadata=None):
+        """Create or update a persistent agent profile."""
+        current = self.get_agent_profile(agent_id, include_state=False)
+        merged = {
+            "display_name": display_name if display_name is not None else current["display_name"],
+            "integration_mode": integration_mode if integration_mode is not None else current["integration_mode"],
+            "integration_target": integration_target if integration_target is not None else current["integration_target"],
+            "native_feature": native_feature if native_feature is not None else current["native_feature"],
+            "onboarding_note": onboarding_note if onboarding_note is not None else current["onboarding_note"],
+            "metadata": metadata if metadata is not None else current.get("metadata"),
+        }
+        metadata_json = json.dumps(merged["metadata"]) if merged["metadata"] is not None else None
+        with self._connect() as conn:
+            conn.execute("""
+                INSERT INTO agent_profiles (
+                    agent_id, display_name, integration_mode, integration_target,
+                    native_feature, onboarding_note, metadata, updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
+                ON CONFLICT(agent_id) DO UPDATE SET
+                    display_name = excluded.display_name,
+                    integration_mode = excluded.integration_mode,
+                    integration_target = excluded.integration_target,
+                    native_feature = excluded.native_feature,
+                    onboarding_note = excluded.onboarding_note,
+                    metadata = excluded.metadata,
+                    updated_at = excluded.updated_at
+            """, (
+                agent_id,
+                merged["display_name"],
+                merged["integration_mode"],
+                merged["integration_target"],
+                merged["native_feature"],
+                merged["onboarding_note"],
+                metadata_json,
+            ))
+            conn.commit()
+        return self.get_agent_profile(agent_id, include_state=True)
 
     def create_task(self, title, created_by, description=None, assigned_to=None,
                     priority=0, payload=None):
@@ -339,6 +521,39 @@ class AgentMemory:
 
     # ── Convenience ──────────────────────────────────────────
 
+    # -- Agent Chat -------------------------------------------------------
+
+    def append_chat_message(self, sender_agent, body, channel="general",
+                            target_agent=None, metadata=None):
+        """Append a message to the agent chat log."""
+        metadata_json = json.dumps(metadata) if metadata else None
+        with self._connect() as conn:
+            cur = conn.execute("""
+                INSERT INTO chat_messages (channel, sender_agent, target_agent, body, metadata)
+                VALUES (?, ?, ?, ?, ?)
+            """, (channel or "general", sender_agent, target_agent, body, metadata_json))
+            conn.commit()
+            return cur.lastrowid
+
+    def get_chat_messages(self, channel=None, agent_id=None, since_id=0, limit=100):
+        """Fetch chat messages, optionally filtered by channel or agent visibility."""
+        query = "SELECT * FROM chat_messages WHERE id > ?"
+        params = [since_id]
+        if channel:
+            query += " AND channel = ?"
+            params.append(channel)
+        if agent_id:
+            query += " AND (sender_agent = ? OR target_agent = ? OR target_agent IS NULL)"
+            params.extend([agent_id, agent_id])
+        query += " ORDER BY id ASC LIMIT ?"
+        params.append(limit)
+        with self._connect() as conn:
+            rows = conn.execute(query, params).fetchall()
+            messages = [dict(r) for r in rows]
+        for message in messages:
+            message["metadata"] = self._json_load(message.get("metadata"), default={})
+        return messages
+
     def handoff(self, from_agent, to_agent, title, description=None, payload=None):
         """Create a task handoff from one agent to another and log it."""
         task_id = self.create_task(
@@ -387,6 +602,7 @@ class AgentMemory:
             knowledge_active = conn.execute(
                 "SELECT COUNT(*) FROM knowledge WHERE active = 1"
             ).fetchone()[0]
+            chat_total = conn.execute("SELECT COUNT(*) FROM chat_messages").fetchone()[0]
             db_size = os.path.getsize(self.db_path) if os.path.exists(self.db_path) else 0
             return {
                 "agents": agents,
@@ -396,6 +612,7 @@ class AgentMemory:
                 "sessions_active": sessions_active,
                 "episodes_total": episodes_total,
                 "knowledge_active": knowledge_active,
+                "chat_total": chat_total,
                 "db_size_bytes": db_size,
                 "db_path": self.db_path,
             }
@@ -694,6 +911,162 @@ class AgentMemory:
                 "episodes_count": len(episodes),
                 "working_keys": sum(len(v) for v in working.values()),
             },
+        }
+
+    def onboarding_context(self, agent_id=None):
+        """Return canonical onboarding context for an agent."""
+        bundle = self.get_onboarding_bundle(agent_id=agent_id)
+        return {
+            "knowledge": bundle["entries"],
+            "episodes": [],
+            "working": {},
+            "summary": {
+                "knowledge_count": len(bundle["entries"]),
+                "episodes_count": 0,
+                "working_keys": 0,
+            },
+            "profile": bundle["profile"],
+            "prompt": bundle["prompt"],
+        }
+
+    def get_onboarding_bundle(self, agent_id=None):
+        """Build a universal onboarding bundle for a known or future agent."""
+        resolved_agent = (agent_id or "<agent_id>").strip() or "<agent_id>"
+        profile = self.get_agent_profile(resolved_agent, include_state=False)
+        sections = [
+            {
+                "subject": "onboarding_connection",
+                "predicate": "instructions",
+                "object": (
+                    "## Agent Memory Connection\n\n"
+                    "- Base URL: http://192.168.178.15:9077\n"
+                    "- Dashboard: http://192.168.178.15:9077\n"
+                    "- Preferred access method: direct HTTP API\n"
+                    "- Optional convenience env var: AGENT_MEMORY_URL=http://192.168.178.15:9077\n\n"
+                    "Agent Memory is the shared memory layer across sessions, agents, and machines."
+                ),
+            },
+            {
+                "subject": "onboarding_bootstrap",
+                "predicate": "instructions",
+                "object": (
+                    "## Bootstrap - Run first in every new session\n\n"
+                    f"1. Load onboarding: GET /api/context/onboarding?agent_id={resolved_agent}\n"
+                    "2. Read all onboarding_* entries and treat them as the source of truth.\n"
+                    "3. Check health and current state: GET /api/status and GET /api/state\n"
+                    f"4. Mark yourself active: POST /api/state/{resolved_agent} with your current task\n"
+                    "5. Load the latest events: GET /api/events?limit=500\n"
+                    "6. Load open tasks: GET /api/tasks\n"
+                    "7. Load recent knowledge: GET /api/knowledge?limit=500\n"
+                    "8. If you are working on a project, load project context with GET /api/context/<project>\n\n"
+                    "If Agent Memory is unreachable, stop and ask the user instead of assuming stale context."
+                ),
+            },
+            {
+                "subject": "onboarding_pflichten",
+                "predicate": "instructions",
+                "object": (
+                    "## Required Updates\n\n"
+                    "- Update your state when you start work and when you finish.\n"
+                    "- Log meaningful commits, deploys, handoffs, and session summaries as events.\n"
+                    "- Store reusable facts, patterns, and decisions as knowledge.\n"
+                    "- Improve onboarding itself when you notice stale or agent-specific instructions."
+                ),
+            },
+            {
+                "subject": "onboarding_regeln",
+                "predicate": "instructions",
+                "object": (
+                    f"## Agent Integration and Rules for {profile['display_name']}\n\n"
+                    f"- Agent ID: {profile['agent_id']}\n"
+                    f"- Preferred integration mode: {profile['integration_mode']}\n"
+                    f"- Integration target: {profile['integration_target']}\n"
+                    f"- Native feature: {profile['native_feature']}\n"
+                    f"- Special note: {profile['onboarding_note']}\n\n"
+                    "Universal rule: use the current agent's own startup or persistent instruction feature. "
+                    "Do not create configuration files for another agent family."
+                ),
+            },
+            {
+                "subject": "onboarding_workflow",
+                "predicate": "instructions",
+                "object": (
+                    "## Workflow Expectations\n\n"
+                    "- For non-trivial work, make a short plan before implementation.\n"
+                    "- Verify outcomes before marking work complete.\n"
+                    "- Prefer minimal, defensible changes over broad rewrites.\n"
+                    "- After every user correction, update Agent Memory with the corrected pattern.\n"
+                    "- Save reusable knowledge proactively when it will prevent future mistakes or save time."
+                ),
+            },
+            {
+                "subject": "onboarding_api_referenz",
+                "predicate": "instructions",
+                "object": (
+                    "## API Reference\n\n"
+                    "Read:\n"
+                    "- GET /api/status\n"
+                    "- GET /api/state\n"
+                    "- GET /api/state/<agent>\n"
+                    "- GET /api/events?limit=N\n"
+                    "- GET /api/tasks\n"
+                    "- GET /api/knowledge?limit=N\n"
+                    "- GET /api/context/<topic>\n"
+                    "- GET /api/onboarding/<agent>\n"
+                    "- GET /api/agents\n"
+                    "- GET /api/chat?limit=N\n\n"
+                    "Write:\n"
+                    "- POST /api/state/<agent>\n"
+                    "- POST /api/events\n"
+                    "- POST /api/knowledge\n"
+                    "- POST /api/agents/<agent>\n"
+                    "- POST /api/chat"
+                ),
+            },
+        ]
+
+        custom_entries = [
+            entry for entry in self.recall(category="onboarding", limit=200)
+            if str(entry.get("subject", "")).startswith("onboarding_custom_")
+        ]
+        custom_entries.sort(key=lambda entry: entry.get("subject", ""))
+
+        entries = []
+        for index, section in enumerate(sections, start=1):
+            entries.append({
+                "id": f"builtin:{section['subject']}",
+                "subject": section["subject"],
+                "predicate": section["predicate"],
+                "object": section["object"],
+                "category": "onboarding",
+                "source": "builtin",
+                "active": 1,
+                "confidence": 1.0,
+                "created_at": None,
+                "updated_at": None,
+                "validated_by": "system",
+                "order": index,
+            })
+        for entry in custom_entries:
+            cloned = dict(entry)
+            cloned["order"] = len(entries) + 1
+            entries.append(cloned)
+
+        prompt_sections = "\n\n".join(entry["object"] for entry in entries)
+        prompt = (
+            f"Agent Memory onboarding for {profile['display_name']} ({profile['agent_id']}).\n"
+            "Use this agent's own native startup instruction feature when available. "
+            "Do not create or rely on another agent's config files.\n\n"
+            "Your first session action is to load /api/context/onboarding with your agent_id, then execute the bootstrap.\n\n"
+            f"{prompt_sections}\n\n"
+            "After reading this, execute the bootstrap and confirm which state, events, tasks, and knowledge you loaded."
+        )
+
+        return {
+            "agent_id": profile["agent_id"],
+            "profile": profile,
+            "entries": entries,
+            "prompt": prompt,
         }
 
     def promote_lesson(self, episode_id):

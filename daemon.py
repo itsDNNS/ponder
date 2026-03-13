@@ -10,6 +10,12 @@ Stop:   kill $(cat ~/.openclaw/agent-memory/daemon.pid)
 API:
   GET  /                         Dashboard (HTML)
   GET  /api/status               Stats and health
+  GET  /api/agents              Agent registry
+  GET  /api/agents/<agent_id>   Single agent profile
+  POST /api/agents/<agent_id>   Upsert agent profile
+  GET  /api/onboarding/<agent>  Canonical onboarding bundle
+  GET  /api/chat                Agent chat messages
+  POST /api/chat                Append agent chat message
   GET  /api/state                All agent states
   GET  /api/state/<agent_id>     Single agent state
   POST /api/state/<agent_id>     Update agent state
@@ -73,31 +79,35 @@ DASHBOARD_HTML = """<!doctype html>
 <html><head>
 <title>Agent Memory</title>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
   body { font-family: monospace; background: #1a1a2e; color: #e0e0e0; margin: 2em; }
-  h1 { color: #0f3460; }
-  h2 { color: #16213e; border-bottom: 1px solid #333; padding-bottom: 4px; }
+  h1 { color: #e94560; margin-bottom: 0.4em; }
+  h2 { color: #e0e0e0; border-bottom: 1px solid #333; padding-bottom: 4px; margin-top: 1.4em; }
+  h3 { color: #22d3ee; margin: 1em 0 0.5em 0; }
   table { border-collapse: collapse; width: 100%; margin-bottom: 2em; }
-  th, td { text-align: left; padding: 6px 12px; border-bottom: 1px solid #333; }
+  th, td { text-align: left; padding: 6px 12px; border-bottom: 1px solid #333; vertical-align: top; }
   th { color: #e94560; }
+  input, textarea, button, select { font: inherit; }
+  input, textarea, select { width: 100%; background: #16213e; color: #e0e0e0; border: 1px solid #333; border-radius: 6px; padding: 8px 10px; }
+  textarea { min-height: 100px; resize: vertical; }
+  button { background: #e94560; color: #fff; border: none; border-radius: 6px; padding: 8px 14px; cursor: pointer; }
+  button:hover { background: #c73650; }
   .status-idle { color: #888; }
-  .status-working { color: #4ade80; }
+  .status-active, .status-working { color: #4ade80; }
   .status-waiting { color: #facc15; }
   .pending { color: #facc15; }
   .claimed { color: #60a5fa; }
   .done, .success { color: #4ade80; }
   .failed, .failure { color: #f87171; }
-  .partial { color: #facc15; }
-  .abandoned { color: #888; }
   .event-type { color: #c084fc; }
   .agent { color: #22d3ee; }
-  .stats { display: flex; gap: 2em; margin-bottom: 2em; flex-wrap: wrap; }
-  .stat { background: #16213e; padding: 12px 20px; border-radius: 8px; }
+  .stats { display: flex; gap: 1em; margin-bottom: 2em; flex-wrap: wrap; }
+  .stat { background: #16213e; padding: 12px 20px; border-radius: 8px; min-width: 140px; }
   .stat-value { font-size: 1.5em; color: #e94560; }
   .stat-label { font-size: 0.85em; color: #888; }
-  pre { background: #16213e; padding: 8px; border-radius: 4px; overflow-x: auto; max-width: 600px; }
-  .tabs { display: flex; gap: 0; margin-bottom: 2em; border-bottom: 2px solid #333; }
-  .tab { padding: 10px 20px; cursor: pointer; color: #888; border-bottom: 2px solid transparent; margin-bottom: -2px; }
+  .tabs { display: flex; gap: 0; margin: 2em 0 1.5em 0; border-bottom: 2px solid #333; flex-wrap: wrap; }
+  .tab { padding: 10px 16px; cursor: pointer; color: #888; border-bottom: 2px solid transparent; margin-bottom: -2px; }
   .tab:hover { color: #e0e0e0; }
   .tab.active { color: #e94560; border-bottom-color: #e94560; }
   .tab-content { display: none; }
@@ -108,22 +118,32 @@ DASHBOARD_HTML = """<!doctype html>
   .session-active { color: #4ade80; }
   .session-ended { color: #888; }
   .wm-key { color: #c084fc; }
-  .pinned { border: 1px solid #e94560; border-radius: 8px; padding: 16px 20px; margin-bottom: 2em; background: #16213e; position: relative; }
-  .pinned h3 { color: #e94560; margin: 0 0 8px 0; font-size: 1.1em; }
-  .pinned pre { background: #1a1a2e; padding: 12px; border-radius: 4px; white-space: pre-wrap; word-wrap: break-word; max-width: 100%; margin: 0; font-size: 0.9em; line-height: 1.5; }
-  .pinned .copy-btn { position: absolute; top: 12px; right: 12px; background: #e94560; color: #fff; border: none; padding: 6px 14px; border-radius: 4px; cursor: pointer; font-family: monospace; font-size: 0.85em; }
-  .pinned .copy-btn:hover { background: #c73650; }
-  .pinned .copy-btn.copied { background: #4ade80; color: #1a1a2e; }
+  .pinned { border: 1px solid #e94560; border-radius: 8px; padding: 16px 20px; margin-bottom: 1em; background: #16213e; position: relative; }
+  .pinned h3 { color: #e94560; margin: 0 0 8px 0; font-size: 1.05em; }
+  .copy-btn { position: absolute; top: 12px; right: 12px; background: #e94560; color: #fff; border: none; padding: 6px 14px; border-radius: 4px; cursor: pointer; font-family: monospace; font-size: 0.85em; }
+  .copy-btn.copied { background: #4ade80; color: #1a1a2e; }
+  .panel { background: #16213e; border-radius: 8px; padding: 16px 18px; margin-bottom: 1em; }
+  .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; margin-bottom: 10px; }
+  .muted { color: #888; }
+  .prompt-box, pre { background: #0f172a; padding: 10px 12px; border-radius: 6px; overflow-x: auto; white-space: pre-wrap; word-break: break-word; }
+  .chat-body { min-width: 360px; }
+  .chat-target { color: #facc15; }
+  .api-status { margin-top: 0.6em; color: #888; }
+  @media (max-width: 760px) {
+    body { margin: 1em; }
+    th, td { padding: 6px 8px; }
+  }
 </style>
 </head><body>
 <h1>Agent Memory</h1>
+<div class="muted">Shared state, agent registry, onboarding bundle, and cross-agent chat.</div>
 
 <div class="stats">
-  <div class="stat"><div class="stat-value">{{ stats.agents }}</div><div class="stat-label">Agents</div></div>
+  <div class="stat"><div class="stat-value">{{ stats.agents }}</div><div class="stat-label">Active States</div></div>
+  <div class="stat"><div class="stat-value">{{ agent_profiles|length }}</div><div class="stat-label">Known Agents</div></div>
   <div class="stat"><div class="stat-value">{{ stats.tasks_pending }}</div><div class="stat-label">Pending Tasks</div></div>
   <div class="stat"><div class="stat-value">{{ stats.events_total }}</div><div class="stat-label">Events</div></div>
-  <div class="stat"><div class="stat-value">{{ stats.sessions_active }}</div><div class="stat-label">Active Sessions</div></div>
-  <div class="stat"><div class="stat-value">{{ stats.episodes_total }}</div><div class="stat-label">Episodes</div></div>
+  <div class="stat"><div class="stat-value">{{ stats.chat_total }}</div><div class="stat-label">Chat Messages</div></div>
   <div class="stat"><div class="stat-value">{{ stats.knowledge_active }}</div><div class="stat-label">Knowledge</div></div>
   <div class="stat"><div class="stat-value">{{ "%.1f KB"|format(stats.db_size_bytes / 1024) }}</div><div class="stat-label">DB Size</div></div>
 </div>
@@ -131,154 +151,294 @@ DASHBOARD_HTML = """<!doctype html>
 {% for note in pinned_notes %}
 <div class="pinned">
   <h3>{{ note.subject }}</h3>
-  <button class="copy-btn" onclick="copyNote(this, 'note-{{ note.id }}')">Copy</button>
+  <button class="copy-btn" onclick="copyText(this, 'note-{{ note.id }}')">Copy</button>
   <pre id="note-{{ note.id }}">{{ note.object }}</pre>
 </div>
 {% endfor %}
 
 <div class="tabs">
-  <div class="tab active" onclick="showTab('overview')">Overview</div>
-  <div class="tab" onclick="showTab('working')">Working Memory</div>
-  <div class="tab" onclick="showTab('episodes')">Episodes</div>
-  <div class="tab" onclick="showTab('knowledge')">Knowledge</div>
+  <div class="tab active" onclick="showTab('overview', this)">Overview</div>
+  <div class="tab" onclick="showTab('chat', this)">Chat</div>
+  <div class="tab" onclick="showTab('agents', this)">Agents</div>
+  <div class="tab" onclick="showTab('working', this)">Working Memory</div>
+  <div class="tab" onclick="showTab('episodes', this)">Episodes</div>
+  <div class="tab" onclick="showTab('knowledge', this)">Knowledge</div>
+  <div class="tab" onclick="showTab('onboarding', this)">Onboarding</div>
 </div>
 
 <div id="tab-overview" class="tab-content active">
-<h2>Agent State</h2>
-<table>
-<tr><th>Agent</th><th>Status</th><th>Current Task</th><th>Updated</th></tr>
-{% for s in states %}
-<tr>
-  <td class="agent">{{ s.agent_id }}</td>
-  <td class="status-{{ s.status }}">{{ s.status }}</td>
-  <td>{{ s.current_task or '-' }}</td>
-  <td>{{ s.updated_at }}</td>
-</tr>
-{% endfor %}
-{% if not states %}<tr><td colspan="4" style="color:#666">No agents registered yet</td></tr>{% endif %}
-</table>
+  <h2>Agent State</h2>
+  <table>
+    <tr><th>Agent</th><th>Status</th><th>Current Task</th><th>Updated</th></tr>
+    {% for s in states %}
+    <tr>
+      <td class="agent">{{ s.agent_id }}</td>
+      <td class="status-{{ s.status }}">{{ s.status }}</td>
+      <td>{{ s.current_task or '-' }}</td>
+      <td>{{ s.updated_at }}</td>
+    </tr>
+    {% endfor %}
+    {% if not states %}<tr><td colspan="4" class="muted">No agents registered yet</td></tr>{% endif %}
+  </table>
 
-<h2>Tasks</h2>
-<table>
-<tr><th>#</th><th>Title</th><th>Status</th><th>Assigned</th><th>Created By</th><th>Created</th></tr>
-{% for t in tasks %}
-<tr>
-  <td>{{ t.id }}</td>
-  <td>{{ t.title }}</td>
-  <td class="{{ t.status }}">{{ t.status }}</td>
-  <td class="agent">{{ t.assigned_to or '-' }}</td>
-  <td class="agent">{{ t.created_by }}</td>
-  <td>{{ t.created_at }}</td>
-</tr>
-{% endfor %}
-{% if not tasks %}<tr><td colspan="6" style="color:#666">No tasks yet</td></tr>{% endif %}
-</table>
+  <h2>Tasks</h2>
+  <table>
+    <tr><th>#</th><th>Title</th><th>Status</th><th>Assigned</th><th>Created By</th><th>Created</th></tr>
+    {% for t in tasks %}
+    <tr>
+      <td>{{ t.id }}</td>
+      <td>{{ t.title }}</td>
+      <td class="{{ t.status }}">{{ t.status }}</td>
+      <td class="agent">{{ t.assigned_to or '-' }}</td>
+      <td class="agent">{{ t.created_by }}</td>
+      <td>{{ t.created_at }}</td>
+    </tr>
+    {% endfor %}
+    {% if not tasks %}<tr><td colspan="6" class="muted">No tasks yet</td></tr>{% endif %}
+  </table>
 
-<h2>Recent Events</h2>
-<table>
-<tr><th>#</th><th>Type</th><th>Source</th><th>Target</th><th>Data</th><th>Time</th></tr>
-{% for e in events %}
-<tr>
-  <td>{{ e.id }}</td>
-  <td class="event-type">{{ e.event_type }}</td>
-  <td class="agent">{{ e.source_agent }}</td>
-  <td class="agent">{{ e.target_agent or '*' }}</td>
-  <td><pre>{{ e.data or '-' }}</pre></td>
-  <td>{{ e.created_at }}</td>
-</tr>
-{% endfor %}
-{% if not events %}<tr><td colspan="6" style="color:#666">No events yet</td></tr>{% endif %}
-</table>
+  <h2>Recent Events</h2>
+  <table>
+    <tr><th>#</th><th>Type</th><th>Source</th><th>Target</th><th>Data</th><th>Time</th></tr>
+    {% for e in events %}
+    <tr>
+      <td>{{ e.id }}</td>
+      <td class="event-type">{{ e.event_type }}</td>
+      <td class="agent">{{ e.source_agent }}</td>
+      <td class="agent">{{ e.target_agent or '*' }}</td>
+      <td><pre>{{ e.data or '-' }}</pre></td>
+      <td>{{ e.created_at }}</td>
+    </tr>
+    {% endfor %}
+    {% if not events %}<tr><td colspan="6" class="muted">No events yet</td></tr>{% endif %}
+  </table>
+</div>
+
+<div id="tab-chat" class="tab-content">
+  <div class="panel">
+    <h2>Agent Chat</h2>
+    <div class="form-grid">
+      <div>
+        <label for="chat-sender">Sender</label>
+        <input id="chat-sender" list="agent-ids" value="{{ default_onboarding_agent }}">
+      </div>
+      <div>
+        <label for="chat-target">Target</label>
+        <input id="chat-target" list="agent-ids" placeholder="optional">
+      </div>
+      <div>
+        <label for="chat-channel">Channel</label>
+        <input id="chat-channel" value="general">
+      </div>
+    </div>
+    <label for="chat-body">Message</label>
+    <textarea id="chat-body" placeholder="Write a handoff, coordination note, or question."></textarea>
+    <div style="margin-top:10px;">
+      <button onclick="sendChatMessage()">Send Message</button>
+      <span id="chat-status" class="api-status"></span>
+    </div>
+  </div>
+
+  <h2>Recent Messages</h2>
+  <table>
+    <tr><th>#</th><th>Time</th><th>Channel</th><th>From</th><th>To</th><th>Message</th></tr>
+    {% for msg in chat_messages %}
+    <tr>
+      <td>{{ msg.id }}</td>
+      <td>{{ msg.created_at }}</td>
+      <td>{{ msg.channel }}</td>
+      <td class="agent">{{ msg.sender_agent }}</td>
+      <td class="chat-target">{{ msg.target_agent or '*' }}</td>
+      <td class="chat-body">{{ msg.body }}</td>
+    </tr>
+    {% endfor %}
+    {% if not chat_messages %}<tr><td colspan="6" class="muted">No chat messages yet</td></tr>{% endif %}
+  </table>
+</div>
+
+<div id="tab-agents" class="tab-content">
+  <h2>Agent Registry</h2>
+  <table>
+    <tr><th>Agent</th><th>Display Name</th><th>Status</th><th>Integration Mode</th><th>Integration Target</th><th>Native Feature</th><th>Onboarding Note</th></tr>
+    {% for profile in agent_profiles %}
+    <tr>
+      <td class="agent">{{ profile.agent_id }}</td>
+      <td>{{ profile.display_name }}</td>
+      <td class="status-{{ profile.state.status if profile.state else 'idle' }}">{{ profile.state.status if profile.state else 'idle' }}</td>
+      <td>{{ profile.integration_mode }}</td>
+      <td>{{ profile.integration_target }}</td>
+      <td>{{ profile.native_feature }}</td>
+      <td>{{ profile.onboarding_note }}</td>
+    </tr>
+    {% endfor %}
+  </table>
 </div>
 
 <div id="tab-working" class="tab-content">
-<h2>Active Sessions</h2>
-<table>
-<tr><th>Session</th><th>Agent</th><th>Started</th><th>Status</th></tr>
-{% for s in sessions %}
-<tr>
-  <td>{{ s.id }}</td>
-  <td class="agent">{{ s.agent_id }}</td>
-  <td>{{ s.started_at }}</td>
-  <td class="{{ 'session-active' if not s.ended_at else 'session-ended' }}">{{ 'active' if not s.ended_at else 'ended' }}</td>
-</tr>
-{% endfor %}
-{% if not sessions %}<tr><td colspan="4" style="color:#666">No sessions</td></tr>{% endif %}
-</table>
+  <h2>Active Sessions</h2>
+  <table>
+    <tr><th>Session</th><th>Agent</th><th>Started</th><th>Status</th></tr>
+    {% for s in sessions %}
+    <tr>
+      <td>{{ s.id }}</td>
+      <td class="agent">{{ s.agent_id }}</td>
+      <td>{{ s.started_at }}</td>
+      <td class="{{ 'session-active' if not s.ended_at else 'session-ended' }}">{{ 'active' if not s.ended_at else 'ended' }}</td>
+    </tr>
+    {% endfor %}
+    {% if not sessions %}<tr><td colspan="4" class="muted">No sessions</td></tr>{% endif %}
+  </table>
 
-<h2>Working Memory</h2>
-{% for agent_id, wm_data in wm_by_agent.items() %}
-<h3 class="agent">{{ agent_id }} ({{ wm_data.session_id }})</h3>
-<table>
-<tr><th>Key</th><th>Value</th></tr>
-{% for k, v in wm_data.items.items() %}
-<tr><td class="wm-key">{{ k }}</td><td>{{ v }}</td></tr>
-{% endfor %}
-{% if not wm_data.items %}<tr><td colspan="2" style="color:#666">(empty)</td></tr>{% endif %}
-</table>
-{% endfor %}
-{% if not wm_by_agent %}<p style="color:#666">No active working memory</p>{% endif %}
+  <h2>Working Memory</h2>
+  {% for agent_id, wm_data in wm_by_agent.items() %}
+  <h3>{{ agent_id }} ({{ wm_data.session_id }})</h3>
+  <table>
+    <tr><th>Key</th><th>Value</th></tr>
+    {% for k, v in wm_data.items.items() %}
+    <tr><td class="wm-key">{{ k }}</td><td>{{ v }}</td></tr>
+    {% endfor %}
+    {% if not wm_data.items %}<tr><td colspan="2" class="muted">(empty)</td></tr>{% endif %}
+  </table>
+  {% endfor %}
+  {% if not wm_by_agent %}<p class="muted">No active working memory.</p>{% endif %}
 </div>
 
 <div id="tab-episodes" class="tab-content">
-<h2>Episodes</h2>
-<table>
-<tr><th>#</th><th>Title</th><th>Agent</th><th>Category</th><th>Outcome</th><th>Tags</th><th>Started</th></tr>
-{% for ep in all_episodes %}
-<tr>
-  <td>{{ ep.id }}</td>
-  <td>{{ ep.title }}</td>
-  <td class="agent">{{ ep.agent_id }}</td>
-  <td>{{ ep.category }}</td>
-  <td class="{{ ep.outcome or '' }}">{{ ep.outcome or '...' }}</td>
-  <td>{% if ep.tags %}{% for tag in ep.tags_list %}<span class="tag">{{ tag }}</span>{% endfor %}{% endif %}</td>
-  <td>{{ ep.started_at }}</td>
-</tr>
-{% endfor %}
-{% if not all_episodes %}<tr><td colspan="7" style="color:#666">No episodes yet</td></tr>{% endif %}
-</table>
+  <h2>Episodes</h2>
+  <table>
+    <tr><th>#</th><th>Title</th><th>Agent</th><th>Category</th><th>Outcome</th><th>Tags</th><th>Started</th></tr>
+    {% for ep in all_episodes %}
+    <tr>
+      <td>{{ ep.id }}</td>
+      <td>{{ ep.title }}</td>
+      <td class="agent">{{ ep.agent_id }}</td>
+      <td>{{ ep.category }}</td>
+      <td class="{{ ep.outcome or '' }}">{{ ep.outcome or '...' }}</td>
+      <td>{% if ep.tags %}{% for tag in ep.tags_list %}<span class="tag">{{ tag }}</span>{% endfor %}{% endif %}</td>
+      <td>{{ ep.started_at }}</td>
+    </tr>
+    {% endfor %}
+    {% if not all_episodes %}<tr><td colspan="7" class="muted">No episodes yet</td></tr>{% endif %}
+  </table>
 </div>
 
 <div id="tab-knowledge" class="tab-content">
-<h2>Knowledge Base</h2>
-<table>
-<tr><th>#</th><th>Category</th><th>Subject</th><th>Predicate</th><th>Object</th><th>Confidence</th><th>Source</th><th>Validated</th></tr>
-{% for k in all_knowledge %}
-<tr>
-  <td>{{ k.id }}</td>
-  <td>{{ k.category }}</td>
-  <td><strong>{{ k.subject }}</strong></td>
-  <td>{{ k.predicate }}</td>
-  <td>{{ k.object }}</td>
-  <td><div class="confidence"><div class="confidence-fill" style="width:{{ (k.confidence * 100)|int }}%"></div></div> {{ "%.0f"|format(k.confidence * 100) }}%</td>
-  <td>{{ k.source or '-' }}</td>
-  <td>{{ k.validated_by or '-' }}</td>
-</tr>
-{% endfor %}
-{% if not all_knowledge %}<tr><td colspan="8" style="color:#666">No knowledge yet</td></tr>{% endif %}
-</table>
+  <h2>Knowledge Base</h2>
+  <table>
+    <tr><th>#</th><th>Category</th><th>Subject</th><th>Predicate</th><th>Object</th><th>Confidence</th><th>Source</th><th>Validated</th></tr>
+    {% for k in all_knowledge %}
+    <tr>
+      <td>{{ k.id }}</td>
+      <td>{{ k.category }}</td>
+      <td><strong>{{ k.subject }}</strong></td>
+      <td>{{ k.predicate }}</td>
+      <td>{{ k.object }}</td>
+      <td><div class="confidence"><div class="confidence-fill" style="width:{{ (k.confidence * 100)|int }}%"></div></div> {{ "%.0f"|format(k.confidence * 100) }}%</td>
+      <td>{{ k.source or '-' }}</td>
+      <td>{{ k.validated_by or '-' }}</td>
+    </tr>
+    {% endfor %}
+    {% if not all_knowledge %}<tr><td colspan="8" class="muted">No knowledge yet</td></tr>{% endif %}
+  </table>
 </div>
 
+<div id="tab-onboarding" class="tab-content">
+  <div class="panel">
+    <h2>Universal Onboarding</h2>
+    <div class="form-grid">
+      <div>
+        <label for="onboarding-agent">Agent</label>
+        <input id="onboarding-agent" list="agent-ids" value="{{ default_onboarding_agent }}">
+      </div>
+      <div style="display:flex; align-items:end; gap:10px;">
+        <button onclick="loadOnboardingPrompt()">Load Onboarding</button>
+        <button onclick="copyText(this, 'onboarding-prompt')">Copy Prompt</button>
+      </div>
+    </div>
+    <div id="onboarding-status" class="api-status">Canonical onboarding bundle for current and future agents.</div>
+    <pre id="onboarding-prompt" class="prompt-box">{{ onboarding_bundle.prompt }}</pre>
+  </div>
+</div>
+
+<datalist id="agent-ids">
+  {% for profile in agent_profiles %}
+  <option value="{{ profile.agent_id }}">{{ profile.display_name }}</option>
+  {% endfor %}
+</datalist>
+
 <script>
-function showTab(name) {
-  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
-  document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
+function showTab(name, el) {
+  document.querySelectorAll('.tab-content').forEach(node => node.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(node => node.classList.remove('active'));
   document.getElementById('tab-' + name).classList.add('active');
-  event.target.classList.add('active');
+  if (el) el.classList.add('active');
 }
-function copyNote(btn, id) {
-  var text = document.getElementById(id).textContent;
-  var ta = document.createElement('textarea');
-  ta.value = text;
-  ta.style.position = 'fixed';
-  ta.style.opacity = '0';
-  document.body.appendChild(ta);
-  ta.select();
-  document.execCommand('copy');
-  document.body.removeChild(ta);
-  btn.textContent = 'Copied!';
-  btn.classList.add('copied');
-  setTimeout(function() { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
+
+async function postJson(url, payload) {
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload || {})
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error || ('HTTP ' + res.status));
+  }
+  return data;
+}
+
+function copyText(btn, id) {
+  const text = document.getElementById(id).textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    const original = btn.textContent;
+    btn.textContent = 'Copied!';
+    btn.classList.add('copied');
+    setTimeout(() => {
+      btn.textContent = original;
+      btn.classList.remove('copied');
+    }, 1600);
+  });
+}
+
+async function sendChatMessage() {
+  const sender = document.getElementById('chat-sender').value.trim();
+  const target = document.getElementById('chat-target').value.trim();
+  const channel = document.getElementById('chat-channel').value.trim() || 'general';
+  const body = document.getElementById('chat-body').value.trim();
+  const status = document.getElementById('chat-status');
+  if (!sender || !body) {
+    status.textContent = 'Sender and message are required.';
+    return;
+  }
+  status.textContent = 'Sending...';
+  try {
+    await postJson('/api/chat', {
+      sender_agent: sender,
+      target_agent: target || null,
+      channel: channel,
+      body: body
+    });
+    status.textContent = 'Message stored.';
+    document.getElementById('chat-body').value = '';
+    window.location.reload();
+  } catch (err) {
+    status.textContent = err.message;
+  }
+}
+
+async function loadOnboardingPrompt() {
+  const agent = document.getElementById('onboarding-agent').value.trim() || 'agent';
+  const status = document.getElementById('onboarding-status');
+  status.textContent = 'Loading...';
+  try {
+    const res = await fetch('/api/onboarding/' + encodeURIComponent(agent));
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
+    document.getElementById('onboarding-prompt').textContent = data.prompt;
+    status.textContent = 'Loaded canonical onboarding for ' + data.profile.agent_id + '.';
+  } catch (err) {
+    status.textContent = err.message;
+  }
 }
 </script>
 </body></html>
@@ -311,6 +471,11 @@ def dashboard():
 
     all_knowledge = mem.recall(limit=100)
     pinned_notes = [k for k in all_knowledge if k.get("category") == "pinned"]
+    agent_profiles = mem.list_agent_profiles()
+    default_onboarding_agent = request.args.get("agent_id") or (
+        agent_profiles[0]["agent_id"] if agent_profiles else "codex"
+    )
+    onboarding_bundle = mem.get_onboarding_bundle(default_onboarding_agent)
 
     return render_template_string(
         DASHBOARD_HTML,
@@ -318,15 +483,86 @@ def dashboard():
         states=mem.get_all_states(),
         tasks=mem.list_tasks(include_done=False, limit=20),
         events=mem.get_latest_events(limit=30),
+        chat_messages=mem.get_chat_messages(limit=50),
+        agent_profiles=agent_profiles,
         sessions=sessions[:20],
         wm_by_agent=wm_by_agent,
         all_episodes=all_episodes,
         all_knowledge=all_knowledge,
         pinned_notes=pinned_notes,
+        default_onboarding_agent=default_onboarding_agent,
+        onboarding_bundle=onboarding_bundle,
     )
 
 
 # ── API: Status ──────────────────────────────────────────────
+
+# -- API: Agent Registry --------------------------------------------------
+
+@app.route("/api/agents", methods=["GET"])
+def api_agents_list():
+    return jsonify(mem.list_agent_profiles())
+
+
+@app.route("/api/agents/<agent_id>", methods=["GET"])
+def api_agents_get(agent_id):
+    return jsonify(mem.get_agent_profile(agent_id))
+
+
+@app.route("/api/agents/<agent_id>", methods=["POST"])
+def api_agents_upsert(agent_id):
+    data = request.get_json(force=True) if request.data else {}
+    profile = mem.upsert_agent_profile(
+        agent_id,
+        display_name=data.get("display_name"),
+        integration_mode=data.get("integration_mode"),
+        integration_target=data.get("integration_target"),
+        native_feature=data.get("native_feature"),
+        onboarding_note=data.get("onboarding_note"),
+        metadata=data.get("metadata"),
+    )
+    return jsonify({"ok": True, "profile": profile})
+
+
+# -- API: Canonical Onboarding -------------------------------------------
+
+@app.route("/api/onboarding", methods=["GET"])
+@app.route("/api/onboarding/<agent_id>", methods=["GET"])
+def api_onboarding(agent_id=None):
+    return jsonify(mem.get_onboarding_bundle(agent_id or request.args.get("agent_id")))
+
+
+# -- API: Agent Chat ------------------------------------------------------
+
+@app.route("/api/chat", methods=["GET"])
+def api_chat_list():
+    since = request.args.get("since", "0")
+    try:
+        since_id = int(since)
+    except ValueError:
+        since_id = 0
+    return jsonify(mem.get_chat_messages(
+        channel=request.args.get("channel"),
+        agent_id=request.args.get("agent_id"),
+        since_id=since_id,
+        limit=int(request.args.get("limit", 100)),
+    ))
+
+
+@app.route("/api/chat", methods=["POST"])
+def api_chat_create():
+    data = request.get_json(force=True)
+    if not data.get("sender_agent") or not data.get("body"):
+        return jsonify({"error": "sender_agent and body required"}), 400
+    message_id = mem.append_chat_message(
+        sender_agent=data["sender_agent"],
+        body=data["body"],
+        channel=data.get("channel", "general"),
+        target_agent=data.get("target_agent"),
+        metadata=data.get("metadata"),
+    )
+    return jsonify({"ok": True, "id": message_id})
+
 
 @app.route("/api/status")
 def api_status():
@@ -697,6 +933,8 @@ def api_maintenance():
 
 @app.route("/api/context/<topic>")
 def api_context(topic):
+    if topic == "onboarding":
+        return jsonify(mem.onboarding_context(agent_id=request.args.get("agent_id")))
     return jsonify(mem.context_for(topic))
 
 

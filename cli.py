@@ -20,6 +20,10 @@ Usage:
   am learn <subj> <pred> <obj> [--cat C] Store knowledge
   am forget <id>                         Deactivate knowledge
   am context <topic>                     Cross-tier context
+  am agents                              List agent profiles
+  am onboarding [agent]                  Print canonical onboarding
+  am chat [--agent A] [--channel C]      List chat messages
+  am say <sender> <message...>           Store chat message
   am promote <episode_id>                Promote episode lessons -> knowledge
   am maintenance                         Run cleanup + decay
   am dashboard                           Open web UI
@@ -584,6 +588,90 @@ def cmd_context(args):
         print(f"No context found for '{topic}'.")
 
 
+def cmd_agents():
+    agents = _get("/api/agents")
+    if not agents:
+        print("No agent profiles found.")
+        return
+    for agent in agents:
+        state = agent.get("state") or {}
+        status = state.get("status", "idle")
+        print(
+            f"  {agent['agent_id']:10s}  {status:10s}  "
+            f"{agent.get('integration_mode') or '-':28s}  "
+            f"{agent.get('integration_target') or '-'}"
+        )
+
+
+def cmd_onboarding(args):
+    agent_id = args[0] if args else None
+    path = f"/api/onboarding/{agent_id}" if agent_id else "/api/onboarding"
+    bundle = _get(path)
+    if "error" in bundle:
+        print(f"Error: {bundle['error']}")
+        return
+    print(bundle.get("prompt", ""))
+
+
+def cmd_chat(args):
+    params = {}
+    i = 0
+    while i < len(args):
+        if args[i] == "--agent" and i + 1 < len(args):
+            params["agent_id"] = args[i + 1]
+            i += 2
+        elif args[i] == "--channel" and i + 1 < len(args):
+            params["channel"] = args[i + 1]
+            i += 2
+        elif args[i] == "--limit" and i + 1 < len(args):
+            params["limit"] = args[i + 1]
+            i += 2
+        else:
+            i += 1
+    messages = _get("/api/chat", params)
+    if not messages:
+        print("No chat messages.")
+        return
+    for msg in messages:
+        target = f" -> {msg['target_agent']}" if msg.get("target_agent") else ""
+        print(f"  #{msg['id']:<4d} [{msg['channel']}] {msg['sender_agent']}{target}: {msg['body']}  ({msg['created_at']})")
+
+
+def cmd_say(args):
+    if len(args) < 2:
+        print("Usage: am say <sender> <message...> [--to <agent>] [--channel <name>]")
+        return
+    sender = args[0]
+    target = None
+    channel = "general"
+    message_parts = []
+    i = 1
+    while i < len(args):
+        if args[i] == "--to" and i + 1 < len(args):
+            target = args[i + 1]
+            i += 2
+        elif args[i] == "--channel" and i + 1 < len(args):
+            channel = args[i + 1]
+            i += 2
+        else:
+            message_parts.append(args[i])
+            i += 1
+    body = " ".join(message_parts).strip()
+    if not body:
+        print("Error: message required")
+        return
+    result = _post("/api/chat", {
+        "sender_agent": sender,
+        "target_agent": target,
+        "channel": channel,
+        "body": body,
+    })
+    if "error" in result:
+        print(f"Error: {result['error']}")
+        return
+    print(f"Chat message #{result['id']} stored.")
+
+
 def cmd_promote(args):
     if not args:
         print("Usage: am promote <episode_id>")
@@ -635,6 +723,10 @@ def main():
         print("  am learn <subj> <pred> <obj>           Store knowledge")
         print("  am forget <id>                         Deactivate knowledge")
         print("  am context <topic>                     Cross-tier context")
+        print("  am agents                              List agent profiles")
+        print("  am onboarding [agent]                  Print canonical onboarding")
+        print("  am chat [--agent A] [--channel C]      List chat messages")
+        print("  am say <sender> <message...>           Store chat message")
         print("  am promote <episode_id>                Promote lessons -> knowledge")
         print("  am maintenance                         Run cleanup + decay")
         print("  am dashboard                           Open web UI")
@@ -682,6 +774,14 @@ def main():
         cmd_forget(rest)
     elif cmd == "context":
         cmd_context(rest)
+    elif cmd == "agents":
+        cmd_agents()
+    elif cmd == "onboarding":
+        cmd_onboarding(rest)
+    elif cmd == "chat":
+        cmd_chat(rest)
+    elif cmd == "say":
+        cmd_say(rest)
     elif cmd == "promote":
         cmd_promote(rest)
     elif cmd == "maintenance":
