@@ -223,10 +223,11 @@ class AgentMemory:
 
     def _default_agent_profile(self, agent_id):
         agent_key = (agent_id or "agent").strip() or "agent"
-        profile = DEFAULT_AGENT_PROFILES.get(agent_key.lower())
+        canonical_agent_id = agent_key.lower()
+        profile = DEFAULT_AGENT_PROFILES.get(canonical_agent_id)
         if profile:
             return {
-                "agent_id": agent_key,
+                "agent_id": canonical_agent_id,
                 **profile,
                 "metadata": dict(profile.get("metadata") or {}),
             }
@@ -305,6 +306,11 @@ class AgentMemory:
                 "SELECT * FROM agent_profiles WHERE agent_id = ?",
                 (agent_id,),
             ).fetchone()
+            if not row:
+                row = conn.execute(
+                    "SELECT * FROM agent_profiles WHERE lower(agent_id) = lower(?) LIMIT 1",
+                    (agent_id,),
+                ).fetchone()
         return self._merge_agent_profile(row, include_state=include_state, requested_agent_id=agent_id)
 
     def list_agent_profiles(self, include_state=True):
@@ -933,6 +939,7 @@ class AgentMemory:
         """Build a universal onboarding bundle for a known or future agent."""
         resolved_agent = (agent_id or "<agent_id>").strip() or "<agent_id>"
         profile = self.get_agent_profile(resolved_agent, include_state=False)
+        canonical_agent_id = profile["agent_id"]
         sections = [
             {
                 "subject": "onboarding_connection",
@@ -951,10 +958,10 @@ class AgentMemory:
                 "predicate": "instructions",
                 "object": (
                     "## Bootstrap - Run first in every new session\n\n"
-                    f"1. Load onboarding: GET /api/context/onboarding?agent_id={resolved_agent}\n"
+                    f"1. Load onboarding: GET /api/context/onboarding?agent_id={canonical_agent_id}\n"
                     "2. Read all onboarding_* entries and treat them as the source of truth.\n"
                     "3. Check health and current state: GET /api/status and GET /api/state\n"
-                    f"4. Mark yourself active: POST /api/state/{resolved_agent} with your current task\n"
+                    f"4. Mark yourself active: POST /api/state/{canonical_agent_id} with your current task\n"
                     "5. Load the latest events: GET /api/events?limit=500\n"
                     "6. Load open tasks: GET /api/tasks\n"
                     "7. Load recent knowledge: GET /api/knowledge?limit=500\n"
