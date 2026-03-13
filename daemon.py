@@ -545,7 +545,7 @@ def api_chat_list():
         channel=request.args.get("channel"),
         agent_id=request.args.get("agent_id"),
         since_id=since_id,
-        limit=int(request.args.get("limit", 100)),
+        limit=_parse_int_arg("limit", 100),
     ))
 
 
@@ -604,7 +604,7 @@ def api_tasks_list():
         status=request.args.get("status"),
         assigned_to=request.args.get("assigned_to"),
         include_done=request.args.get("all", "").lower() in ("1", "true", "yes"),
-        limit=int(request.args.get("limit", 50)),
+        limit=_parse_int_arg("limit", 50),
     ))
 
 
@@ -672,6 +672,17 @@ def _parse_since(value):
         return 0, None
 
 
+def _parse_int_arg(name, default):
+    """Parse an integer query arg and fall back to default on invalid input."""
+    value = request.args.get(name)
+    if value is None:
+        return default
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
 @app.route("/api/events", methods=["GET"])
 def api_events_list():
     since_id, since_time = _parse_since(request.args.get("since"))
@@ -681,7 +692,7 @@ def api_events_list():
         event_type=request.args.get("type"),
         source_agent=request.args.get("source"),
         target_agent=request.args.get("target"),
-        limit=int(request.args.get("limit", 100)),
+        limit=_parse_int_arg("limit", 100),
     ))
 
 
@@ -734,7 +745,7 @@ def api_sessions_start():
 def api_sessions_list():
     return jsonify(mem.list_sessions(
         agent_id=request.args.get("agent_id"),
-        limit=int(request.args.get("limit", 20)),
+        limit=_parse_int_arg("limit", 20),
     ))
 
 
@@ -807,7 +818,7 @@ def api_episodes_list():
         outcome=request.args.get("outcome"),
         tag=request.args.get("tag"),
         query=request.args.get("q"),
-        limit=int(request.args.get("limit", 20)),
+        limit=_parse_int_arg("limit", 20),
     ))
 
 
@@ -871,7 +882,7 @@ def api_knowledge_list():
         category=request.args.get("category"),
         tag=request.args.get("tag"),
         query=request.args.get("q"),
-        limit=int(request.args.get("limit", 50)),
+        limit=_parse_int_arg("limit", 50),
     ))
 
 
