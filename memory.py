@@ -984,10 +984,10 @@ class AgentMemory:
                 "predicate": "instructions",
                 "object": (
                     "## Agent Memory Connection\n\n"
-                    "- Base URL: http://192.168.178.15:9077\n"
-                    "- Dashboard: http://192.168.178.15:9077\n"
+                    "- Base URL: http://192.168.178.20:9077\n"
+                    "- Dashboard: http://192.168.178.20:9077\n"
                     "- Preferred access method: direct HTTP API\n"
-                    "- Optional convenience env var: AGENT_MEMORY_URL=http://192.168.178.15:9077\n\n"
+                    "- Optional convenience env var: AGENT_MEMORY_URL=http://192.168.178.20:9077\n\n"
                     "Agent Memory is the shared memory layer across sessions, agents, and machines."
                 ),
             },
