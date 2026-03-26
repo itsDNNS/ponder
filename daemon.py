@@ -1327,6 +1327,56 @@ def api_knowledge_forget(kid):
     return jsonify({"ok": True})
 
 
+# ── API: Observations ────────────────────────────────────────
+
+@app.route("/api/observations", methods=["GET"])
+def api_observations_list():
+    return jsonify(mem.get_observations(
+        agent_id=request.args.get("agent_id"),
+        session_id=request.args.get("session_id"),
+        tool_name=request.args.get("tool_name"),
+        limit=int(request.args.get("limit", 100)),
+        offset=int(request.args.get("offset", 0)),
+    ))
+
+
+@app.route("/api/observations", methods=["POST"])
+def api_observations_create():
+    data = request.get_json(force=True)
+    agent_id = data.get("agent_id")
+    tool_name = data.get("tool_name")
+    if not agent_id or not tool_name:
+        return jsonify({"error": "agent_id and tool_name required"}), 400
+    oid = mem.add_observation(
+        agent_id=agent_id,
+        tool_name=tool_name,
+        action=data.get("action"),
+        file_path=data.get("file_path"),
+        summary=data.get("summary"),
+        session_id=data.get("session_id"),
+    )
+    return jsonify({"ok": True, "id": oid})
+
+
+@app.route("/api/observations/search")
+def api_observations_search():
+    query = request.args.get("q", "")
+    if not query:
+        return jsonify({"error": "q parameter required"}), 400
+    return jsonify(mem.search_observations(
+        query=query,
+        limit=int(request.args.get("limit", 50)),
+    ))
+
+
+@app.route("/api/observations/summary/<session_id>")
+def api_observations_summary(session_id):
+    summary = mem.session_observation_summary(session_id)
+    if summary is None:
+        return jsonify({"error": "No observations for session"}), 404
+    return jsonify({"session_id": session_id, "summary": summary})
+
+
 # ── API: Maintenance ─────────────────────────────────────────
 
 @app.route("/api/maintenance", methods=["POST"])
@@ -1334,11 +1384,13 @@ def api_maintenance():
     cleaned_wm = mem.cleanup_expired_wm()
     cleaned_tasks = mem.cleanup_done_tasks(days=7)
     decayed = mem.decay_knowledge(days_threshold=30, decay_rate=0.05)
+    cleaned_obs = mem.cleanup_old_observations(days=30)
     return jsonify({
         "ok": True,
         "cleaned_wm": cleaned_wm,
         "cleaned_tasks": cleaned_tasks,
         "decayed_knowledge": decayed,
+        "cleaned_observations": cleaned_obs,
     })
 
 
