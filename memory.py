@@ -207,6 +207,13 @@ CREATE TRIGGER IF NOT EXISTS observations_ad AFTER DELETE ON observations BEGIN
     VALUES ('delete', old.id, old.summary, old.file_path, old.tool_name, old.action);
 END;
 
+CREATE TRIGGER IF NOT EXISTS observations_au AFTER UPDATE ON observations BEGIN
+    INSERT INTO observations_fts(observations_fts, rowid, summary, file_path, tool_name, action)
+    VALUES ('delete', old.id, old.summary, old.file_path, old.tool_name, old.action);
+    INSERT INTO observations_fts(rowid, summary, file_path, tool_name, action)
+    VALUES (new.id, new.summary, new.file_path, new.tool_name, new.action);
+END;
+
 CREATE INDEX IF NOT EXISTS idx_sessions_agent ON sessions(agent_id, started_at);
 CREATE INDEX IF NOT EXISTS idx_wm_agent_session ON working_memory(agent_id, session_id);
 CREATE INDEX IF NOT EXISTS idx_episodes_agent ON episodes(agent_id, started_at);
@@ -1289,7 +1296,7 @@ class AgentMemory:
             fp = r["file_path"]
             action = r["action"]
             if fp:
-                if action in ("write", "edit", "create"):
+                if action in ("write", "edit"):
                     files_modified.add(fp)
                 elif action == "read":
                     files_read.add(fp)
