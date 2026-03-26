@@ -1335,8 +1335,8 @@ def api_observations_list():
         agent_id=request.args.get("agent_id"),
         session_id=request.args.get("session_id"),
         tool_name=request.args.get("tool_name"),
-        limit=int(request.args.get("limit", 100)),
-        offset=int(request.args.get("offset", 0)),
+        limit=_parse_int_arg("limit", 100),
+        offset=_parse_int_arg("offset", 0),
     ))
 
 
@@ -1363,10 +1363,14 @@ def api_observations_search():
     query = request.args.get("q", "")
     if not query:
         return jsonify({"error": "q parameter required"}), 400
-    return jsonify(mem.search_observations(
-        query=query,
-        limit=int(request.args.get("limit", 50)),
-    ))
+    try:
+        results = mem.search_observations(
+            query=query,
+            limit=_parse_int_arg("limit", 50),
+        )
+    except Exception:
+        return jsonify({"error": "Invalid search query"}), 400
+    return jsonify(results)
 
 
 @app.route("/api/observations/summary/<session_id>")
@@ -1438,6 +1442,9 @@ if __name__ == "__main__":
         log.info("Cleaned up %d expired working memory entries", cleaned_wm)
     if decayed:
         log.info("Decayed confidence of %d unvalidated knowledge entries", decayed)
+    cleaned_obs = mem.cleanup_old_observations(days=30)
+    if cleaned_obs:
+        log.info("Cleaned up %d old observations", cleaned_obs)
 
     try:
         from waitress import serve
