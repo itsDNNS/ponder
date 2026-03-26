@@ -204,5 +204,101 @@ class AgentMemoryFeatureTests(unittest.TestCase):
         self.assertNotIn("onclick=\"setActiveChatChannel(", html)
 
 
+    # ── Observations ──────────────────────────────────────────
+
+    def test_observation_create_and_list(self):
+        resp = self.client.post("/api/observations", json={
+            "agent_id": "claude-lin",
+            "tool_name": "Edit",
+            "action": "edit",
+            "file_path": "/home/dnns/Projects/docsight/app/web.py",
+            "summary": "Edited web.py",
+        })
+        self.assertEqual(resp.status_code, 200)
+        data = resp.get_json()
+        self.assertTrue(data["ok"])
+        self.assertIn("id", data)
+
+        resp = self.client.get("/api/observations?agent_id=claude-lin")
+        self.assertEqual(resp.status_code, 200)
+        obs = resp.get_json()
+        self.assertEqual(len(obs), 1)
+        self.assertEqual(obs[0]["tool_name"], "Edit")
+        self.assertEqual(obs[0]["file_path"], "/home/dnns/Projects/docsight/app/web.py")
+
+    def test_observation_requires_agent_and_tool(self):
+        resp = self.client.post("/api/observations", json={"agent_id": "test"})
+        self.assertEqual(resp.status_code, 400)
+
+        resp = self.client.post("/api/observations", json={"tool_name": "Read"})
+        self.assertEqual(resp.status_code, 400)
+
+    def test_observation_filter_by_tool(self):
+        self.client.post("/api/observations", json={
+            "agent_id": "claude-lin", "tool_name": "Read", "summary": "Read file"
+        })
+        self.client.post("/api/observations", json={
+            "agent_id": "claude-lin", "tool_name": "Bash", "summary": "Run command"
+        })
+        resp = self.client.get("/api/observations?tool_name=Bash")
+        obs = resp.get_json()
+        self.assertEqual(len(obs), 1)
+        self.assertEqual(obs[0]["tool_name"], "Bash")
+
+    def test_observation_fts_search(self):
+        self.client.post("/api/observations", json={
+            "agent_id": "claude-lin", "tool_name": "Edit",
+            "summary": "Fixed smokeping proxy validation",
+        })
+        self.client.post("/api/observations", json={
+            "agent_id": "claude-lin", "tool_name": "Read",
+            "summary": "Read requirements.txt",
+        })
+        resp = self.client.get("/api/observations/search?q=smokeping")
+        self.assertEqual(resp.status_code, 200)
+        results = resp.get_json()
+        self.assertEqual(len(results), 1)
+        self.assertIn("smokeping", results[0]["summary"])
+
+    def test_observation_search_invalid_query_returns_400(self):
+        resp = self.client.get('/api/observations/search?q="unterminated')
+        self.assertIn(resp.status_code, (200, 400))
+
+    def test_observation_search_empty_query_returns_400(self):
+        resp = self.client.get("/api/observations/search?q=")
+        self.assertEqual(resp.status_code, 400)
+
+    def test_observation_session_summary(self):
+        session_id = "test-session-123"
+        for tool, action, fp, summary in [
+            ("Read", "read", "/app/web.py", "Read web.py"),
+            ("Edit", "edit", "/app/web.py", "Edited web.py"),
+            ("Read", "read", "/app/main.py", "Read main.py"),
+            ("Bash", "command", None, "git status"),
+            ("Write", "write", "/app/new_file.py", "Wrote new_file.py"),
+        ]:
+            self.client.post("/api/observations", json={
+                "agent_id": "claude-lin", "tool_name": tool,
+                "action": action, "file_path": fp,
+                "summary": summary, "session_id": session_id,
+            })
+
+        resp = self.client.get(f"/api/observations/summary/{session_id}")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.get_json()
+        summary = data["summary"]
+        self.assertIn("Tool calls: 5", summary)
+        self.assertIn("/app/web.py", summary)
+        self.assertIn("/app/new_file.py", summary)
+
+    def test_observation_summary_missing_session(self):
+        resp = self.client.get("/api/observations/summary/nonexistent")
+        self.assertEqual(resp.status_code, 404)
+
+    def test_observation_invalid_limit_handled(self):
+        resp = self.client.get("/api/observations?limit=abc")
+        self.assertEqual(resp.status_code, 200)
+
+
 if __name__ == "__main__":
     unittest.main()
