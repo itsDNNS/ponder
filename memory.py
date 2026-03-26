@@ -1054,6 +1054,8 @@ class AgentMemory:
                     "- Update your state when you start work and when you finish.\n"
                     "- Log meaningful commits, deploys, handoffs, and session summaries as events.\n"
                     "- Store reusable facts, patterns, and decisions as knowledge.\n"
+                    "- Log tool calls as observations via POST /api/observations (or use a PostToolUse hook).\n"
+                    "- Use GET /api/observations/search?q= to find what was done in past sessions.\n"
                     "- Improve onboarding itself when you notice stale or agent-specific instructions."
                 ),
             },
@@ -1098,13 +1100,17 @@ class AgentMemory:
                     "- GET /api/context/<topic>\n"
                     "- GET /api/onboarding/<agent>\n"
                     "- GET /api/agents\n"
-                    "- GET /api/chat?limit=N\n\n"
+                    "- GET /api/chat?limit=N\n"
+                    "- GET /api/observations?agent_id=X&session_id=X&tool_name=X&limit=N\n"
+                    "- GET /api/observations/search?q=QUERY\n"
+                    "- GET /api/observations/summary/<session_id>\n\n"
                     "Write:\n"
                     "- POST /api/state/<agent>\n"
                     "- POST /api/events\n"
                     "- POST /api/knowledge\n"
                     "- POST /api/agents/<agent>\n"
-                    "- POST /api/chat"
+                    "- POST /api/chat\n"
+                    "- POST /api/observations (agent_id, tool_name, action, file_path, summary)"
                 ),
             },
         ]
