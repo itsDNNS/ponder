@@ -1322,5 +1322,7 @@ class AgentMemory:
                 DELETE FROM observations
                 WHERE created_at < datetime('now', ? || ' days')
             """, (f"-{days}",))
+            if cur.rowcount:
+                conn.execute("INSERT INTO observations_fts(observations_fts) VALUES ('rebuild')")
             conn.commit()
             return cur.rowcount
