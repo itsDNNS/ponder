@@ -175,6 +175,45 @@ CREATE TABLE IF NOT EXISTS knowledge (
     active INTEGER NOT NULL DEFAULT 1
 );
 
+-- ── Observations (tool-call tracking) ──────────────────
+
+CREATE TABLE IF NOT EXISTS observations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT REFERENCES sessions(id) ON DELETE SET NULL,
+    agent_id TEXT NOT NULL,
+    tool_name TEXT NOT NULL,
+    action TEXT,
+    file_path TEXT,
+    summary TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_observations_session ON observations(session_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_observations_agent ON observations(agent_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_observations_tool ON observations(tool_name, created_at);
+
+CREATE VIRTUAL TABLE IF NOT EXISTS observations_fts USING fts5(
+    summary, file_path, tool_name, action,
+    content='observations', content_rowid='id'
+);
+
+CREATE TRIGGER IF NOT EXISTS observations_ai AFTER INSERT ON observations BEGIN
+    INSERT INTO observations_fts(rowid, summary, file_path, tool_name, action)
+    VALUES (new.id, new.summary, new.file_path, new.tool_name, new.action);
+END;
+
+CREATE TRIGGER IF NOT EXISTS observations_ad AFTER DELETE ON observations BEGIN
+    INSERT INTO observations_fts(observations_fts, rowid, summary, file_path, tool_name, action)
+    VALUES ('delete', old.id, old.summary, old.file_path, old.tool_name, old.action);
+END;
+
+CREATE TRIGGER IF NOT EXISTS observations_au AFTER UPDATE ON observations BEGIN
+    INSERT INTO observations_fts(observations_fts, rowid, summary, file_path, tool_name, action)
+    VALUES ('delete', old.id, old.summary, old.file_path, old.tool_name, old.action);
+    INSERT INTO observations_fts(rowid, summary, file_path, tool_name, action)
+    VALUES (new.id, new.summary, new.file_path, new.tool_name, new.action);
+END;
+
 CREATE INDEX IF NOT EXISTS idx_sessions_agent ON sessions(agent_id, started_at);
 CREATE INDEX IF NOT EXISTS idx_wm_agent_session ON working_memory(agent_id, session_id);
 CREATE INDEX IF NOT EXISTS idx_episodes_agent ON episodes(agent_id, started_at);
@@ -1185,3 +1224,105 @@ class AgentMemory:
             else:
                 return self.learn(subject, predicate, object, category,
                                   source, confidence, tags, source_episode_id)
+
+    # ── Observations ────────────────────────────────────────
+
+    def add_observation(self, agent_id, tool_name, action=None, file_path=None,
+                        summary=None, session_id=None):
+        """Record a tool-call observation. Returns observation id."""
+        with self._connect() as conn:
+            cur = conn.execute("""
+                INSERT INTO observations (session_id, agent_id, tool_name, action, file_path, summary)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (session_id, agent_id, tool_name, action, file_path, summary))
+            conn.commit()
+            return cur.lastrowid
+
+    def get_observations(self, agent_id=None, session_id=None, tool_name=None,
+                         limit=100, offset=0):
+        """List observations with optional filters."""
+        clauses = []
+        params = []
+        if agent_id:
+            clauses.append("agent_id = ?")
+            params.append(agent_id)
+        if session_id:
+            clauses.append("session_id = ?")
+            params.append(session_id)
+        if tool_name:
+            clauses.append("tool_name = ?")
+            params.append(tool_name)
+        where = " WHERE " + " AND ".join(clauses) if clauses else ""
+        params.extend([limit, offset])
+        with self._connect() as conn:
+            rows = conn.execute(
+                f"SELECT * FROM observations{where} ORDER BY created_at DESC LIMIT ? OFFSET ?",
+                params,
+            ).fetchall()
+            return [dict(r) for r in rows]
+
+    def search_observations(self, query, limit=50):
+        """Full-text search over observations."""
+        with self._connect() as conn:
+            rows = conn.execute("""
+                SELECT o.* FROM observations o
+                JOIN observations_fts fts ON o.id = fts.rowid
+                WHERE observations_fts MATCH ?
+                ORDER BY rank
+                LIMIT ?
+            """, (query, limit)).fetchall()
+            return [dict(r) for r in rows]
+
+    def session_observation_summary(self, session_id):
+        """Generate a template-based summary of observations for a session."""
+        with self._connect() as conn:
+            rows = conn.execute("""
+                SELECT tool_name, action, file_path, summary, created_at
+                FROM observations WHERE session_id = ?
+                ORDER BY created_at
+            """, (session_id,)).fetchall()
+
+        if not rows:
+            return None
+
+        tools = {}
+        files_modified = set()
+        files_read = set()
+        actions = []
+
+        for r in rows:
+            tool = r["tool_name"]
+            tools[tool] = tools.get(tool, 0) + 1
+            fp = r["file_path"]
+            action = r["action"]
+            if fp:
+                if action in ("write", "edit"):
+                    files_modified.add(fp)
+                elif action == "read":
+                    files_read.add(fp)
+            if r["summary"]:
+                actions.append(r["summary"])
+
+        parts = []
+        parts.append(f"Tool calls: {sum(tools.values())} ({', '.join(f'{v}x {k}' for k, v in sorted(tools.items(), key=lambda x: -x[1]))})")
+        if files_modified:
+            parts.append(f"Files modified: {', '.join(sorted(files_modified))}")
+        if files_read:
+            parts.append(f"Files read: {', '.join(sorted(files_read))}")
+        if actions:
+            unique = list(dict.fromkeys(actions))
+            parts.append(f"Actions: {'; '.join(unique[:20])}")
+
+        return "\n".join(parts)
+
+    def cleanup_old_observations(self, days=30):
+        """Delete observations older than the given number of days."""
+        with self._connect() as conn:
+            cur = conn.execute("""
+                DELETE FROM observations
+                WHERE created_at < datetime('now', ? || ' days')
+            """, (f"-{days}",))
+            if cur.rowcount:
+                conn.execute("INSERT INTO observations_fts(observations_fts) VALUES ('rebuild')")
+            conn.commit()
+            return cur.rowcount
