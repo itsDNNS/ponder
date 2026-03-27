@@ -311,12 +311,18 @@ class AgentMemory:
             ).fetchone()
             return dict(row) if row else None
 
-    def get_all_states(self):
-        """Get state of all agents."""
+    def get_all_states(self, stale_days=None):
+        """Get state of all agents. If stale_days is set, exclude agents not updated in that many days."""
         with self._connect() as conn:
-            rows = conn.execute(
-                "SELECT * FROM agent_state ORDER BY agent_id"
-            ).fetchall()
+            if stale_days is not None and stale_days > 0:
+                rows = conn.execute(
+                    "SELECT * FROM agent_state WHERE updated_at >= datetime('now', ?) ORDER BY updated_at DESC",
+                    (f"-{stale_days} days",),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT * FROM agent_state ORDER BY agent_id"
+                ).fetchall()
             return [dict(r) for r in rows]
 
     def update_state(self, agent_id, status, current_task=None, context=None):
