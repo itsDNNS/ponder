@@ -161,7 +161,7 @@ DASHBOARD_HTML = """<!doctype html>
 </style>
 </head><body>
 <h1>Agent Memory</h1>
-<div class="muted">Shared state, agent registry, onboarding bundle, and cross-agent chat.</div>
+<div class="muted">Shared state, agent registry, onboarding bundle, and cross-agent chat. &mdash; <a href="/live" style="color: #4ade80;">Live Activity</a></div>
 
 <div class="stats">
   <div class="stat"><div class="stat-value">{{ stats.agents }}</div><div class="stat-label">Active States</div></div>
