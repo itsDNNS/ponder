@@ -871,26 +871,33 @@ LIVE_HTML = """<!doctype html>
 <div class="section-title">Recent Activity</div>
 <div class="obs-list" id="observations"><div class="empty">Loading...</div></div>
 <script>
-function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+function esc(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+var VALID_STATUSES = ['active', 'working', 'idle', 'waiting'];
+function safeStatus(s) { return VALID_STATUSES.indexOf(s) >= 0 ? s : 'idle'; }
 async function refresh() {
   try {
-    const states = await (await fetch('/api/state')).json();
-    const agentsEl = document.getElementById('agents');
-    const dot = document.getElementById('pulse-dot');
-    const anyActive = Object.values(states).some(s => s.status === 'active' || s.status === 'working');
+    var statesRes = await fetch('/api/state');
+    if (!statesRes.ok) throw new Error('state: ' + statesRes.status);
+    var states = await statesRes.json();
+    var agentsEl = document.getElementById('agents');
+    var dot = document.getElementById('pulse-dot');
+    var anyActive = states.some(function(s) { return s.status === 'active' || s.status === 'working'; });
     dot.className = 'dot ' + (anyActive ? 'dot-active' : 'dot-idle');
-    agentsEl.innerHTML = Object.entries(states).map(([id, s]) =>
-      '<div class="agent-card"><div class="agent-name">' + esc(id) + '</div>' +
-      '<div class="agent-status status-' + esc(s.status) + '">' + esc(s.status) + '</div>' +
-      (s.current_task ? '<div class="agent-task">' + esc(s.current_task) + '</div>' : '') +
-      '</div>'
-    ).join('');
-    const obs = await (await fetch('/api/observations?limit=30')).json();
-    const el = document.getElementById('observations');
+    agentsEl.innerHTML = states.map(function(s) {
+      var cls = safeStatus(s.status);
+      return '<div class="agent-card"><div class="agent-name">' + esc(s.agent_id) + '</div>' +
+        '<div class="agent-status status-' + cls + '">' + esc(s.status) + '</div>' +
+        (s.current_task ? '<div class="agent-task">' + esc(s.current_task) + '</div>' : '') +
+        '</div>';
+    }).join('');
+    var obsRes = await fetch('/api/observations?limit=30');
+    if (!obsRes.ok) throw new Error('observations: ' + obsRes.status);
+    var obs = await obsRes.json();
+    var el = document.getElementById('observations');
     if (!obs.length) { el.innerHTML = '<div class="empty">No observations yet</div>'; return; }
     el.innerHTML = obs.map(function(o) {
-      var t = new Date(o.created_at + 'Z');
-      var time = t.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      var t = new Date((o.created_at || '').replace(' ', 'T') + 'Z');
+      var time = isNaN(t) ? o.created_at : t.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
       return '<div class="obs">' +
         '<span class="obs-time">' + esc(time) + '</span>' +
         '<span class="obs-tool">' + esc(o.tool_name) + '</span>' +
@@ -898,7 +905,9 @@ async function refresh() {
         '<span class="obs-summary">' + esc((o.summary || '').substring(0, 120)) + '</span></div>';
     }).join('');
     document.getElementById('refresh-label').textContent = 'Updated ' + new Date().toLocaleTimeString();
-  } catch (e) { console.error(e); }
+  } catch (e) {
+    document.getElementById('refresh-label').textContent = 'Error: ' + e.message;
+  }
 }
 refresh();
 setInterval(refresh, 3000);
