@@ -833,6 +833,84 @@ syncTabFromHash();
 """
 
 
+LIVE_HTML = """<!doctype html>
+<html><head>
+<title>Agent Memory - Live</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', monospace; background: #06080f; color: #e8edff; padding: 16px; }
+  h1 { font-size: 1.1rem; color: #7c3aed; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+  h1 .dot { width: 8px; height: 8px; border-radius: 50%; animation: pulse 2s ease infinite; }
+  .dot-active { background: #4ade80; }
+  .dot-idle { background: #888; }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+  .agent-bar { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+  .agent-card { background: rgba(17, 22, 40, 0.65); border: 1px solid rgba(120, 130, 180, 0.12); border-radius: 8px; padding: 10px 14px; min-width: 200px; }
+  .agent-name { font-weight: 600; color: #22d3ee; font-size: 0.85rem; }
+  .agent-status { font-size: 0.75rem; margin-top: 2px; }
+  .agent-task { font-size: 0.78rem; color: #e8edff; margin-top: 4px; }
+  .status-active, .status-working { color: #4ade80; }
+  .status-idle { color: #666; }
+  .obs-list { display: flex; flex-direction: column; gap: 2px; }
+  .obs { display: flex; gap: 10px; padding: 6px 10px; border-radius: 6px; font-size: 0.78rem; align-items: baseline; }
+  .obs:nth-child(odd) { background: rgba(17, 22, 40, 0.4); }
+  .obs-time { color: #666; min-width: 55px; flex-shrink: 0; }
+  .obs-tool { color: #c084fc; min-width: 50px; font-weight: 600; flex-shrink: 0; }
+  .obs-action { color: #22d3ee; min-width: 55px; flex-shrink: 0; }
+  .obs-summary { color: #e8edff; word-break: break-all; }
+  .section-title { font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: #766e86; margin: 14px 0 6px; }
+  .empty { color: #666; font-style: italic; font-size: 0.82rem; padding: 8px 0; }
+  .refresh { font-size: 0.65rem; color: #666; }
+</style>
+</head>
+<body>
+<h1><div class="dot" id="pulse-dot"></div> Agent Memory Live <span class="refresh" id="refresh-label"></span></h1>
+<div class="agent-bar" id="agents"></div>
+<div class="section-title">Recent Activity</div>
+<div class="obs-list" id="observations"><div class="empty">Loading...</div></div>
+<script>
+function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+async function refresh() {
+  try {
+    const states = await (await fetch('/api/state')).json();
+    const agentsEl = document.getElementById('agents');
+    const dot = document.getElementById('pulse-dot');
+    const anyActive = Object.values(states).some(s => s.status === 'active' || s.status === 'working');
+    dot.className = 'dot ' + (anyActive ? 'dot-active' : 'dot-idle');
+    agentsEl.innerHTML = Object.entries(states).map(([id, s]) =>
+      '<div class="agent-card"><div class="agent-name">' + esc(id) + '</div>' +
+      '<div class="agent-status status-' + esc(s.status) + '">' + esc(s.status) + '</div>' +
+      (s.current_task ? '<div class="agent-task">' + esc(s.current_task) + '</div>' : '') +
+      '</div>'
+    ).join('');
+    const obs = await (await fetch('/api/observations?limit=30')).json();
+    const el = document.getElementById('observations');
+    if (!obs.length) { el.innerHTML = '<div class="empty">No observations yet</div>'; return; }
+    el.innerHTML = obs.map(function(o) {
+      var t = new Date(o.created_at + 'Z');
+      var time = t.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      return '<div class="obs">' +
+        '<span class="obs-time">' + esc(time) + '</span>' +
+        '<span class="obs-tool">' + esc(o.tool_name) + '</span>' +
+        '<span class="obs-action">' + esc(o.action || '') + '</span>' +
+        '<span class="obs-summary">' + esc((o.summary || '').substring(0, 120)) + '</span></div>';
+    }).join('');
+    document.getElementById('refresh-label').textContent = 'Updated ' + new Date().toLocaleTimeString();
+  } catch (e) { console.error(e); }
+}
+refresh();
+setInterval(refresh, 3000);
+</script>
+</body></html>"""
+
+
+@app.route("/live")
+def live_dashboard():
+    return LIVE_HTML
+
+
 @app.route("/")
 def dashboard():
     # Gather working memory for all active sessions
