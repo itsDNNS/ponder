@@ -314,10 +314,10 @@ class AgentMemory:
     def get_all_states(self, stale_days=None):
         """Get state of all agents. If stale_days is set, exclude agents not updated in that many days."""
         with self._connect() as conn:
-            if stale_days is not None:
+            if stale_days is not None and stale_days > 0:
                 rows = conn.execute(
-                    "SELECT * FROM agent_state WHERE updated_at >= datetime('now', ? || ' days') ORDER BY updated_at DESC",
-                    (f"-{stale_days}",),
+                    "SELECT * FROM agent_state WHERE updated_at >= datetime('now', ?) ORDER BY updated_at DESC",
+                    (f"-{stale_days} days",),
                 ).fetchall()
             else:
                 rows = conn.execute(
