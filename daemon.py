@@ -876,7 +876,7 @@ var VALID_STATUSES = ['active', 'working', 'idle', 'waiting'];
 function safeStatus(s) { return VALID_STATUSES.indexOf(s) >= 0 ? s : 'idle'; }
 async function refresh() {
   try {
-    var statesRes = await fetch('/api/state');
+    var statesRes = await fetch('/api/state?stale_days=7');
     if (!statesRes.ok) throw new Error('state: ' + statesRes.status);
     var states = await statesRes.json();
     var agentsEl = document.getElementById('agents');
@@ -956,7 +956,7 @@ def dashboard():
     return render_template_string(
         DASHBOARD_HTML,
         stats=mem.stats(),
-        states=mem.get_all_states(),
+        states=mem.get_all_states(stale_days=7),
         tasks=mem.list_tasks(include_done=False, limit=20),
         events=mem.get_latest_events(limit=30),
         chat_messages=mem.get_chat_messages(limit=50),
@@ -1062,7 +1062,8 @@ def api_status():
 
 @app.route("/api/state")
 def api_state_all():
-    return jsonify(mem.get_all_states())
+    stale_days = _parse_int_arg("stale_days", None)
+    return jsonify(mem.get_all_states(stale_days=stale_days))
 
 
 @app.route("/api/state/<agent_id>", methods=["GET"])
