@@ -935,11 +935,7 @@ DASHBOARD_HTML = """<!doctype html>
       <div style="display:flex; gap:10px; align-items:end; margin-bottom:12px;">
         <div>
           <label for="onboarding-agent" style="font-size:11px; color:#999; text-transform:uppercase; letter-spacing:0.5px; display:block; margin-bottom:4px;">Agent</label>
-          <select id="onboarding-agent" style="padding:6px 10px; border:1px solid #e0ddd6; border-radius:6px; font-family:'Figtree',sans-serif; font-size:13px;">
-            {% for profile in agent_profiles %}
-            <option value="{{ profile.agent_id }}">{{ profile.display_name or profile.agent_id }}</option>
-            {% endfor %}
-          </select>
+          <input id="onboarding-agent" list="agent-ids" value="{{ default_onboarding_agent }}" placeholder="agent-id eingeben" style="padding:6px 10px; border:1px solid #e0ddd6; border-radius:6px; font-family:'Figtree',sans-serif; font-size:13px; width:180px;">
         </div>
         <button onclick="loadOnboardingPrompt()" style="padding:8px 20px; background:#1a1a1a; color:#fff; border:none; border-radius:6px; font-size:12px; cursor:pointer; font-family:'Figtree',sans-serif;">Load</button>
         <button onclick="copyText(this, 'onboarding-prompt')" style="padding:8px 20px; background:#1a1a1a; color:#fff; border:none; border-radius:6px; font-size:12px; cursor:pointer; font-family:'Figtree',sans-serif;">Copy</button>
