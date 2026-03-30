@@ -708,6 +708,24 @@ DASHBOARD_HTML = """<!doctype html>
 </div>
 
 <div id="tab-agents" class="tab-content">
+  <div style="display:flex;gap:16px;margin-bottom:24px;flex-wrap:wrap;">
+    <div style="background:#fff;border:1px solid #e0ddd6;border-radius:8px;padding:14px 20px;flex:1;min-width:120px;">
+      <div style="font-size:28px;font-weight:800;color:#1a1a1a;">{{ agent_profiles|length }}</div>
+      <div style="font-size:11px;color:#999;margin-top:2px;">Total Agents</div>
+    </div>
+    <div style="background:#fff;border:1px solid #e0ddd6;border-radius:8px;padding:14px 20px;flex:1;min-width:120px;">
+      <div style="font-size:28px;font-weight:800;color:#2ecc71;">{{ agents_active|length }}</div>
+      <div style="font-size:11px;color:#999;margin-top:2px;">Active</div>
+    </div>
+    <div style="background:#fff;border:1px solid #e0ddd6;border-radius:8px;padding:14px 20px;flex:1;min-width:120px;">
+      <div style="font-size:28px;font-weight:800;color:#d4791c;">{{ agents_inactive|length }}</div>
+      <div style="font-size:11px;color:#999;margin-top:2px;">Inactive</div>
+    </div>
+    <div style="background:#fff;border:1px solid #e0ddd6;border-radius:8px;padding:14px 20px;flex:1;min-width:120px;">
+      <div style="font-size:28px;font-weight:800;color:#ccc;">{{ agents_deactivated|length }}</div>
+      <div style="font-size:11px;color:#999;margin-top:2px;">Deactivated</div>
+    </div>
+  </div>
   <div class="section-head"><div class="section-title">Active Agents</div></div>
   {% for profile in agents_active %}
   <div class="agent-card">
