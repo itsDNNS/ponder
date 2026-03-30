@@ -661,52 +661,54 @@ DASHBOARD_HTML = """<!doctype html>
 
 <div id="tab-chat" class="tab-content">
   <div class="chat-shell">
-    <aside class="panel chat-sidebar">
+    <aside class="chat-sidebar">
       <div class="section-title" style="margin-bottom: 8px;">Channels</div>
       <div id="chat-channel-tabs" class="chat-channel-tabs"></div>
-      <div style="margin-top: 12px;">
+      <div style="margin-top: 16px;">
         <label for="chat-quick-channel">Open Channel</label>
-        <input id="chat-quick-channel" placeholder="general">
-      </div>
-      <div style="margin-top: 8px;">
-        <button onclick="jumpToChatChannel()">Open</button>
+        <input id="chat-quick-channel" placeholder="general" style="margin-bottom: 6px;">
+        <button onclick="jumpToChatChannel()" style="width: 100%;">Open</button>
       </div>
     </aside>
-    <section class="chat-main">
-      <div class="panel">
-        <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 8px;">
-          <div>
-            <div class="section-title" id="chat-active-title">#all</div>
-            <div id="chat-feed-status" class="muted" style="font-size: 11px;">Watching chat feed.</div>
-          </div>
-          <span id="chat-follow-state" class="chat-follow">Follow mode: on</span>
+    <section class="chat-main" style="display: flex; flex-direction: column; min-height: 0;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+        <div style="display: flex; align-items: baseline; gap: 12px;">
+          <span class="section-title" id="chat-active-title" style="margin: 0;">#all</span>
+          <span id="chat-feed-status" class="muted" style="font-size: 11px;">Watching chat feed.</span>
         </div>
-        <div class="chat-toolbar">
-          <div>
-            <label for="chat-watch-agent">Highlight Agent</label>
-            <input id="chat-watch-agent" list="agent-ids" value="{{ default_onboarding_agent }}" placeholder="optional">
-          </div>
-          <div>
-            <label for="chat-channel">Post Channel</label>
-            <input id="chat-channel" value="{{ default_chat_channel if default_chat_channel != 'all' else 'general' }}">
-          </div>
-          <div>
-            <label for="chat-target">Target</label>
-            <input id="chat-target" list="agent-ids" placeholder="optional">
-          </div>
-          <div>
-            <label for="chat-sender">Sender</label>
-            <input id="chat-sender" list="agent-ids" value="{{ default_onboarding_agent }}">
-          </div>
-        </div>
-        <label for="chat-body">Message</label>
-        <textarea id="chat-body" placeholder="Write a handoff, coordination note, or question."></textarea>
-        <div style="margin-top: 10px;">
-          <button onclick="sendChatMessage()">Send Message</button>
-          <span id="chat-status" class="muted" style="margin-left: 8px; font-size: 11px;"></span>
-        </div>
+        <span id="chat-follow-state" class="chat-follow">Follow mode: on</span>
       </div>
-      <div id="chat-feed" class="chat-feed"></div>
+      <div id="chat-feed" class="chat-feed" style="flex: 1; min-height: 300px; max-height: 55vh;"></div>
+      <div style="border: 1px solid #e0ddd6; border-radius: 10px; padding: 12px 16px; margin-top: 10px; background: #fff;">
+        <div style="display: flex; gap: 8px; align-items: end;">
+          <div style="flex: 1;">
+            <textarea id="chat-body" placeholder="Message..." style="min-height: 44px; max-height: 120px; resize: vertical;"></textarea>
+          </div>
+          <button onclick="sendChatMessage()" style="height: 44px; padding: 0 20px;">Send</button>
+        </div>
+        <details style="margin-top: 8px;">
+          <summary style="font-size: 11px; color: #999; cursor: pointer; user-select: none;">Options</summary>
+          <div class="chat-toolbar" style="margin-top: 8px;">
+            <div>
+              <label for="chat-watch-agent">Highlight Agent</label>
+              <input id="chat-watch-agent" list="agent-ids" value="{{ default_onboarding_agent }}" placeholder="optional">
+            </div>
+            <div>
+              <label for="chat-channel">Channel</label>
+              <input id="chat-channel" value="{{ default_chat_channel if default_chat_channel != 'all' else 'general' }}">
+            </div>
+            <div>
+              <label for="chat-target">Target</label>
+              <input id="chat-target" list="agent-ids" placeholder="optional">
+            </div>
+            <div>
+              <label for="chat-sender">Sender</label>
+              <input id="chat-sender" list="agent-ids" value="{{ default_onboarding_agent }}">
+            </div>
+          </div>
+        </details>
+        <span id="chat-status" class="muted" style="font-size: 11px;"></span>
+      </div>
     </section>
   </div>
 </div>
