@@ -1378,17 +1378,23 @@ function changeChatNickname() {
 getChatNickname();
 
 async function renameAgent(agentId, el) {
-  var current = el.textContent === 'set name' ? agentId : el.textContent;
-  var name = prompt('Display name for ' + agentId + ':', current);
-  if (name !== null && name.trim()) {
-    try {
-      await postJson('/api/agents/' + encodeURIComponent(agentId), { display_name: name.trim() });
-      el.textContent = name.trim();
+  var current = el.textContent === 'set name' ? '' : el.textContent;
+  var name = prompt('Display name for ' + agentId + ' (leave empty to clear):', current);
+  if (name === null) return;
+  try {
+    var newName = name.trim() || agentId;
+    await postJson('/api/agents/' + encodeURIComponent(agentId), { display_name: newName });
+    if (newName === agentId) {
+      el.textContent = 'set name';
+      el.style.color = '#ccc';
+      el.style.fontSize = '11px';
+    } else {
+      el.textContent = newName;
       el.style.color = '';
       el.style.fontSize = '';
-    } catch(e) {
-      alert('Failed: ' + e.message);
     }
+  } catch(e) {
+    alert('Failed: ' + e.message);
   }
 }
 
