@@ -1,0 +1,355 @@
+#!/usr/bin/env bun
+/**
+ * Ponder MCP Server -- Shared memory channel for Claude Code.
+ *
+ * Connects to a Ponder instance and provides:
+ * - Chat notifications (agent-to-agent and human-to-agent)
+ * - Tools for replying, updating state, managing tasks
+ * - Live polling for new messages
+ *
+ * Config via env:
+ *   PONDER_URL        Base URL of the Ponder server (default: http://localhost:9077)
+ *   PONDER_AGENT_ID   This agent's ID (default: claude)
+ *   PONDER_POLL_MS    Poll interval in ms (default: 3000)
+ */
+
+import { Server } from '@modelcontextprotocol/sdk/server/index.js'
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
+import {
+  ListToolsRequestSchema,
+  CallToolRequestSchema,
+} from '@modelcontextprotocol/sdk/types.js'
+
+const PONDER_URL = process.env.PONDER_URL || 'http://localhost:9077'
+const AGENT_ID = process.env.PONDER_AGENT_ID || 'claude'
+const POLL_MS = parseInt(process.env.PONDER_POLL_MS || '3000', 10)
+
+process.on('unhandledRejection', err => {
+  process.stderr.write(`ponder mcp: unhandled rejection: ${err}\n`)
+})
+process.on('uncaughtException', err => {
+  process.stderr.write(`ponder mcp: uncaught exception: ${err}\n`)
+})
+
+// ── HTTP helpers ──────────────────────────────────────────
+
+async function api(method: string, path: string, body?: unknown): Promise<unknown> {
+  const url = `${PONDER_URL}${path}`
+  const opts: RequestInit = {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+  }
+  if (body !== undefined) opts.body = JSON.stringify(body)
+  const res = await fetch(url, opts)
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(`Ponder API ${method} ${path}: ${res.status} ${text}`)
+  }
+  return res.json()
+}
+
+function escapeXml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
+// ── MCP Server ───────────────────────────────────────────
+
+const mcp = new Server(
+  { name: 'ponder', version: '0.1.0' },
+  { capabilities: { tools: {} } },
+)
+
+// ── Tools ────────────────────────────────────────────────
+
+mcp.setRequestHandler(ListToolsRequestSchema, async () => ({
+  tools: [
+    {
+      name: 'reply',
+      description: 'Send a chat message to a Ponder channel. Use to communicate with other agents or the human.',
+      inputSchema: {
+        type: 'object' as const,
+        properties: {
+          channel: { type: 'string', description: 'Channel to post to (e.g. "general", "hydra")' },
+          body: { type: 'string', description: 'Message content (supports markdown)' },
+          target_agent: { type: 'string', description: 'Optional: direct message to a specific agent' },
+        },
+        required: ['channel', 'body'],
+      },
+    },
+    {
+      name: 'update_state',
+      description: 'Update this agent\'s state in Ponder (status, current task).',
+      inputSchema: {
+        type: 'object' as const,
+        properties: {
+          status: { type: 'string', enum: ['active', 'working', 'idle', 'waiting'], description: 'Agent status' },
+          current_task: { type: 'string', description: 'What the agent is currently doing' },
+        },
+        required: ['status'],
+      },
+    },
+    {
+      name: 'create_task',
+      description: 'Create a new task in Ponder.',
+      inputSchema: {
+        type: 'object' as const,
+        properties: {
+          title: { type: 'string', description: 'Task title' },
+          description: { type: 'string', description: 'Task description' },
+          assigned_to: { type: 'string', description: 'Agent to assign to' },
+          priority: { type: 'string', description: 'Priority level' },
+        },
+        required: ['title'],
+      },
+    },
+    {
+      name: 'complete_task',
+      description: 'Mark a task as completed.',
+      inputSchema: {
+        type: 'object' as const,
+        properties: {
+          task_id: { type: 'number', description: 'Task ID to complete' },
+          result: { type: 'string', description: 'Completion summary' },
+        },
+        required: ['task_id'],
+      },
+    },
+    {
+      name: 'add_knowledge',
+      description: 'Add a knowledge entry to Ponder.',
+      inputSchema: {
+        type: 'object' as const,
+        properties: {
+          subject: { type: 'string', description: 'Subject/topic' },
+          predicate: { type: 'string', description: 'Relationship type' },
+          object: { type: 'string', description: 'The knowledge content' },
+          category: { type: 'string', description: 'Category (fact, pattern, rule, workflow, decision)' },
+          confidence: { type: 'number', description: 'Confidence 0.0-1.0 (default: 0.8)' },
+        },
+        required: ['subject', 'predicate', 'object'],
+      },
+    },
+    {
+      name: 'log_event',
+      description: 'Log an event to the Ponder activity timeline.',
+      inputSchema: {
+        type: 'object' as const,
+        properties: {
+          event_type: { type: 'string', description: 'Event type (commit, push, deploy, session_start, etc.)' },
+          data: { type: 'string', description: 'Event data as JSON string' },
+          target_agent: { type: 'string', description: 'Optional target agent' },
+        },
+        required: ['event_type'],
+      },
+    },
+    {
+      name: 'handoff',
+      description: 'Hand off work to another agent via Ponder.',
+      inputSchema: {
+        type: 'object' as const,
+        properties: {
+          to_agent: { type: 'string', description: 'Agent to hand off to' },
+          title: { type: 'string', description: 'Handoff title/summary' },
+          description: { type: 'string', description: 'Detailed handoff instructions' },
+          channel: { type: 'string', description: 'Channel for the handoff chat message (default: general)' },
+        },
+        required: ['to_agent', 'title'],
+      },
+    },
+    {
+      name: 'get_context',
+      description: 'Get cross-tier context from Ponder for a topic.',
+      inputSchema: {
+        type: 'object' as const,
+        properties: {
+          topic: { type: 'string', description: 'Topic to get context for' },
+        },
+        required: ['topic'],
+      },
+    },
+  ],
+}))
+
+mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
+  const { name, arguments: args } = req.params
+  try {
+    switch (name) {
+      case 'reply': {
+        const result = await api('POST', '/api/chat', {
+          sender_agent: AGENT_ID,
+          channel: args!.channel,
+          body: args!.body,
+          target_agent: args!.target_agent || null,
+        })
+        return { content: [{ type: 'text', text: `Message sent to #${args!.channel}` }] }
+      }
+
+      case 'update_state': {
+        await api('POST', `/api/state/${AGENT_ID}`, {
+          status: args!.status,
+          current_task: args!.current_task || null,
+        })
+        return { content: [{ type: 'text', text: `State updated: ${args!.status}` }] }
+      }
+
+      case 'create_task': {
+        const result = await api('POST', '/api/tasks', {
+          title: args!.title,
+          description: args!.description || null,
+          created_by: AGENT_ID,
+          assigned_to: args!.assigned_to || null,
+          priority: args!.priority || null,
+        }) as { id: number }
+        return { content: [{ type: 'text', text: `Task #${result.id} created: ${args!.title}` }] }
+      }
+
+      case 'complete_task': {
+        await api('POST', `/api/tasks/${args!.task_id}/complete`, {
+          result: args!.result || null,
+        })
+        return { content: [{ type: 'text', text: `Task #${args!.task_id} completed` }] }
+      }
+
+      case 'add_knowledge': {
+        const result = await api('POST', '/api/knowledge', {
+          subject: args!.subject,
+          predicate: args!.predicate,
+          object: args!.object,
+          category: args!.category || 'fact',
+          confidence: args!.confidence ?? 0.8,
+          source: AGENT_ID,
+        }) as { id: number }
+        return { content: [{ type: 'text', text: `Knowledge #${result.id} added: ${args!.subject}` }] }
+      }
+
+      case 'log_event': {
+        await api('POST', '/api/events', {
+          event_type: args!.event_type,
+          source_agent: AGENT_ID,
+          target_agent: args!.target_agent || null,
+          data: args!.data || null,
+        })
+        return { content: [{ type: 'text', text: `Event logged: ${args!.event_type}` }] }
+      }
+
+      case 'handoff': {
+        // Create handoff via API
+        const result = await api('POST', '/api/handoff', {
+          from_agent: AGENT_ID,
+          to_agent: args!.to_agent,
+          title: args!.title,
+          description: args!.description || null,
+        }) as { task_id: number }
+        // Also post to chat channel
+        const channel = args!.channel || 'general'
+        await api('POST', '/api/chat', {
+          sender_agent: AGENT_ID,
+          target_agent: args!.to_agent,
+          channel,
+          body: `Handoff: ${args!.title}${args!.description ? '\n\n' + args!.description : ''}`,
+        })
+        return { content: [{ type: 'text', text: `Handoff to ${args!.to_agent}: task #${result.task_id}, posted to #${channel}` }] }
+      }
+
+      case 'get_context': {
+        const result = await api('GET', `/api/context/${encodeURIComponent(args!.topic as string)}`)
+        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
+      }
+
+      default:
+        return { content: [{ type: 'text', text: `Unknown tool: ${name}` }], isError: true }
+    }
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err)
+    return { content: [{ type: 'text', text: `Error: ${msg}` }], isError: true }
+  }
+})
+
+// ── Chat Polling (Channel Notifications) ─────────────────
+
+let lastSeenMessageId = 0
+
+async function pollChat(): Promise<void> {
+  try {
+    const messages = await api('GET', `/api/chat?limit=20`) as Array<{
+      id: number
+      sender_agent: string
+      target_agent: string | null
+      channel: string
+      body: string
+      created_at: string
+    }>
+
+    // On first poll, just record the latest ID
+    if (lastSeenMessageId === 0 && messages.length > 0) {
+      lastSeenMessageId = messages[messages.length - 1].id
+      return
+    }
+
+    // Find new messages since last poll
+    const newMessages = messages.filter(m => m.id > lastSeenMessageId)
+    if (newMessages.length > 0) {
+      lastSeenMessageId = newMessages[newMessages.length - 1].id
+    }
+
+    // Notify for messages targeted at this agent OR broadcast messages from other agents
+    for (const m of newMessages) {
+      if (m.sender_agent === AGENT_ID) continue // skip own messages
+
+      const isTargeted = m.target_agent?.toLowerCase() === AGENT_ID.toLowerCase()
+      const isMention = m.body.includes(`@${AGENT_ID}`)
+
+      if (isTargeted || isMention) {
+        // Build channel notification (same format as Telegram plugin)
+        let meta = `chat_id="${m.channel}" message_id="${m.id}" user="${m.sender_agent}" ts="${m.created_at}"`
+        const content = m.body
+
+        void mcp.notification({
+          method: 'notifications/claude/channel',
+          params: {
+            content,
+            meta: {
+              chat_id: m.channel,
+              message_id: String(m.id),
+              user: m.sender_agent,
+              ts: m.created_at,
+            },
+          },
+        })
+
+        process.stderr.write(`ponder: notified ${AGENT_ID} of message #${m.id} from ${m.sender_agent}\n`)
+      }
+    }
+  } catch (err) {
+    // Silent on poll errors (server might be temporarily unreachable)
+  }
+}
+
+// ── Startup ──────────────────────────────────────────────
+
+async function main() {
+  // Set agent state to active
+  try {
+    await api('POST', `/api/state/${AGENT_ID}`, {
+      status: 'active',
+      current_task: 'Connected via MCP',
+    })
+  } catch {
+    process.stderr.write(`ponder: warning: could not set initial state (server unreachable?)\n`)
+  }
+
+  // Start chat polling
+  setInterval(pollChat, POLL_MS)
+  pollChat() // initial poll
+
+  // Connect MCP
+  const transport = new StdioServerTransport()
+  await mcp.connect(transport)
+
+  process.stderr.write(`ponder mcp: connected as ${AGENT_ID} to ${PONDER_URL}\n`)
+}
+
+main().catch(err => {
+  process.stderr.write(`ponder mcp: fatal: ${err}\n`)
+  process.exit(1)
+})
