@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Agent Memory CLI -- Command-line interface for agent-memory daemon.
+"""Ponder CLI -- Command-line interface for Ponder daemon.
 
 Usage:
   am status                              Show stats
@@ -76,7 +76,7 @@ except ImportError:
 
     requests = _MinimalRequests()
 
-BASE = os.environ.get("AGENT_MEMORY_URL", "http://localhost:9077")
+BASE = os.environ.get("PONDER_URL", "http://localhost:9077")
 
 
 def _get(path, params=None):
@@ -87,7 +87,7 @@ def _get(path, params=None):
             url += f"?{qs}"
     r = requests.get(url)
     if not r.ok and r.status_code == 0:
-        print("Error: Agent Memory daemon not running. Start with: python daemon.py")
+        print("Error: Ponder daemon not running. Start with: python daemon.py")
         sys.exit(1)
     return r.json()
 
@@ -95,7 +95,7 @@ def _get(path, params=None):
 def _post(path, data=None):
     r = requests.post(f"{BASE}{path}", json=data or {})
     if not r.ok and r.status_code == 0:
-        print("Error: Agent Memory daemon not running. Start with: python daemon.py")
+        print("Error: Ponder daemon not running. Start with: python daemon.py")
         sys.exit(1)
     try:
         return r.json()
@@ -702,7 +702,7 @@ def cmd_dashboard():
 def main():
     args = sys.argv[1:]
     if not args:
-        print("Agent Memory CLI")
+        print("Ponder CLI")
         print()
         print("Commands:")
         print("  am status                              Stats (all tiers)")

@@ -1,14 +1,14 @@
-"""Agent Memory -- Shared SQLite state layer for AI agent collaboration.
+"""Ponder -- Shared SQLite state layer for AI agent collaboration.
 
 Core module providing direct SQLite access. Can be imported by Nova (Python)
 or used by the daemon. Thread-safe, WAL mode, ACID transactions.
 
 Usage:
     from memory import AgentMemory
-    mem = AgentMemory()  # uses default path ~/.openclaw/agent-memory/agent.db
+    mem = AgentMemory()  # uses default path ~/.openclaw/ponder/agent.db
     mem.update_state("nova", "working", "Implementing smokeping collector")
     mem.append_event("commit", "nova", {"hash": "abc123", "message": "..."})
-    mem.create_task("Fix CGA 401 bug", created_by="dennis", assigned_to="claude")
+    mem.create_task("Fix CGA 401 bug", created_by="human", assigned_to="claude")
 """
 
 import json
@@ -18,7 +18,7 @@ import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
 
-DEFAULT_DB_PATH = Path(os.environ.get("AGENT_MEMORY_DB", str(Path.home() / ".openclaw" / "agent-memory" / "agent.db")))
+DEFAULT_DB_PATH = Path(os.environ.get("PONDER_DB", str(Path.home() / ".openclaw" / "ponder" / "agent.db")))
 
 DEFAULT_AGENT_PROFILES = {
     "claude": {
@@ -224,7 +224,7 @@ CREATE INDEX IF NOT EXISTS idx_knowledge_category ON knowledge(category, active)
 
 
 class AgentMemory:
-    """Shared agent memory backed by SQLite."""
+    """Ponder shared memory backed by SQLite."""
 
     def __init__(self, db_path=None):
         self.db_path = str(db_path or DEFAULT_DB_PATH)
@@ -1027,6 +1027,7 @@ class AgentMemory:
 
     def get_onboarding_bundle(self, agent_id=None):
         """Build a universal onboarding bundle for a known or future agent."""
+        base_url = os.environ.get("PONDER_URL", "http://localhost:9077")
         resolved_agent = (agent_id or "<agent_id>").strip() or "<agent_id>"
         profile = self.get_agent_profile(resolved_agent, include_state=False)
         canonical_agent_id = profile["agent_id"]
@@ -1035,12 +1036,12 @@ class AgentMemory:
                 "subject": "onboarding_connection",
                 "predicate": "instructions",
                 "object": (
-                    "## Agent Memory Connection\n\n"
-                    "- Base URL: http://127.0.0.1:9077\n"
-                    "- Dashboard: http://127.0.0.1:9077\n"
+                    "## Ponder Connection\n\n"
+                    f"- Base URL: {base_url}\n"
+                    f"- Dashboard: {base_url}\n"
                     "- Preferred access method: direct HTTP API\n"
-                    "- Optional convenience env var: AGENT_MEMORY_URL=http://127.0.0.1:9077\n\n"
-                    "Agent Memory is the shared memory layer across sessions, agents, and machines."
+                    f"- Optional convenience env var: PONDER_URL={base_url}\n\n"
+                    "Ponder is the shared memory layer across sessions, agents, and machines."
                 ),
             },
             {
@@ -1056,7 +1057,7 @@ class AgentMemory:
                     "6. Load open tasks: GET /api/tasks\n"
                     "7. Load recent knowledge: GET /api/knowledge?limit=500\n"
                     "8. If you are working on a project, load project context with GET /api/context/<project>\n\n"
-                    "If Agent Memory is unreachable, stop and ask the user instead of assuming stale context."
+                    "If Ponder is unreachable, stop and ask the user instead of assuming stale context."
                 ),
             },
             {
@@ -1094,7 +1095,7 @@ class AgentMemory:
                     "- For non-trivial work, make a short plan before implementation.\n"
                     "- Verify outcomes before marking work complete.\n"
                     "- Prefer minimal, defensible changes over broad rewrites.\n"
-                    "- After every user correction, update Agent Memory with the corrected pattern.\n"
+                    "- After every user correction, update Ponder with the corrected pattern.\n"
                     "- Save reusable knowledge proactively when it will prevent future mistakes or save time."
                 ),
             },
@@ -1157,7 +1158,7 @@ class AgentMemory:
 
         prompt_sections = "\n\n".join(entry["object"] for entry in entries)
         prompt = (
-            f"Agent Memory onboarding for {profile['display_name']} ({profile['agent_id']}).\n"
+            f"Ponder onboarding for {profile['display_name']} ({profile['agent_id']}).\n"
             "Use this agent's own native startup instruction feature when available. "
             "Do not create or rely on another agent's config files.\n\n"
             "Your first session action is to load /api/context/onboarding with your agent_id, then execute the bootstrap.\n\n"

@@ -2,10 +2,10 @@
 """Ponder Daemon -- REST API for shared agent state.
 
 Runs on localhost:9077 (mnemonic: 90 = memory, 77 = lucky).
-Used by Nova (Python), Claude (CLI/curl), and Dennis (browser).
+Used by AI agents and humans via browser.
 
 Start:  python daemon.py
-Stop:   kill $(cat ~/.openclaw/agent-memory/daemon.pid)
+Stop:   kill $(cat ~/.openclaw/ponder/daemon.pid)
 
 API:
   GET  /                         Dashboard (HTML)
@@ -60,15 +60,15 @@ from flask import Flask, jsonify, request, render_template_string
 
 from memory import AgentMemory
 
-log = logging.getLogger("agent-memory")
+log = logging.getLogger("ponder")
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 
-PORT = int(os.environ.get("AGENT_MEMORY_PORT", 9077))
+PORT = int(os.environ.get("PONDER_PORT", 9077))
 DOCKER = os.environ.get("DOCKER", "").strip() == "1"
-PID_FILE = Path.home() / ".openclaw" / "agent-memory" / "daemon.pid"
+PID_FILE = Path.home() / ".openclaw" / "ponder" / "daemon.pid"
 
 app = Flask(__name__)
 mem = AgentMemory()
@@ -2270,7 +2270,7 @@ if __name__ == "__main__":
 
     host = "0.0.0.0" if DOCKER else "127.0.0.1"
 
-    log.info("Agent Memory daemon starting on %s:%d", host, PORT)
+    log.info("Ponder daemon starting on %s:%d", host, PORT)
     log.info("Dashboard: http://localhost:%d", PORT)
     if not DOCKER:
         log.info("PID file: %s", PID_FILE)

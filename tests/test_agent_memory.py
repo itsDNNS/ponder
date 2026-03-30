@@ -15,7 +15,7 @@ class AgentMemoryFeatureTests(unittest.TestCase):
     def setUp(self):
         self.tmpdir = tempfile.TemporaryDirectory()
         self.db_path = Path(self.tmpdir.name) / "agent.db"
-        os.environ["AGENT_MEMORY_DB"] = str(self.db_path)
+        os.environ["PONDER_DB"] = str(self.db_path)
         for module_name in ("memory", "daemon"):
             sys.modules.pop(module_name, None)
 
@@ -27,7 +27,7 @@ class AgentMemoryFeatureTests(unittest.TestCase):
 
     def tearDown(self):
         self.tmpdir.cleanup()
-        os.environ.pop("AGENT_MEMORY_DB", None)
+        os.environ.pop("PONDER_DB", None)
 
     def test_onboarding_bundle_uses_agent_native_instructions(self):
         response = self.client.get("/api/onboarding/codex")
@@ -211,7 +211,7 @@ class AgentMemoryFeatureTests(unittest.TestCase):
             "agent_id": "claude-lin",
             "tool_name": "Edit",
             "action": "edit",
-            "file_path": "/home/dnns/Projects/docsight/app/web.py",
+            "file_path": "/app/test-project/web.py",
             "summary": "Edited web.py",
         })
         self.assertEqual(resp.status_code, 200)
@@ -224,7 +224,7 @@ class AgentMemoryFeatureTests(unittest.TestCase):
         obs = resp.get_json()
         self.assertEqual(len(obs), 1)
         self.assertEqual(obs[0]["tool_name"], "Edit")
-        self.assertEqual(obs[0]["file_path"], "/home/dnns/Projects/docsight/app/web.py")
+        self.assertEqual(obs[0]["file_path"], "/app/test-project/web.py")
 
     def test_observation_requires_agent_and_tool(self):
         resp = self.client.post("/api/observations", json={"agent_id": "test"})

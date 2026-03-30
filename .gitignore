@@ -4,3 +4,4 @@
 *.db.bak
 __pycache__/
 daemon.pid
+.superpowers/
