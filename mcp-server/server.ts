@@ -180,8 +180,8 @@ mcp.setRequestHandler(ListToolsRequestSchema, async () => ({
         type: 'object' as const,
         properties: {
           channel: { type: 'string', description: 'Optional: filter by channel' },
-          since_id: { type: 'number', description: 'Optional: only return messages after this ID' },
-          limit: { type: 'number', description: 'Max messages to return (default: 50)' },
+          since_id: { type: 'integer', description: 'Optional: only return messages after this ID' },
+          limit: { type: 'integer', description: 'Max messages to return (default: 50, max: 200)' },
         },
       },
     },
@@ -279,13 +279,18 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
       }
 
       case 'get_messages': {
-        const sinceId = typeof args?.since_id === 'number' ? args.since_id : 0
-        const limit = typeof args?.limit === 'number' ? args.limit : 50
+        const sinceId = Math.max(0, Math.floor(Number(args?.since_id) || 0))
+        const limit = Math.min(200, Math.max(1, Math.floor(Number(args?.limit) || 50)))
         const sinceParam = sinceId > 0 ? `&since=${sinceId}` : ''
         const channelParam = args?.channel ? `&channel=${encodeURIComponent(args.channel as string)}` : ''
         const messages = await api('GET', `/api/chat?agent_id=${encodeURIComponent(AGENT_ID)}&limit=${limit}${sinceParam}${channelParam}`) as ChatMessage[]
 
         const incoming = messages.filter(m => m.sender_agent.toLowerCase() !== agentIdLower)
+
+        // Advance shared cursor so polling doesn't replay these messages
+        if (messages.length > 0) {
+          lastSeenMessageId = Math.max(lastSeenMessageId, ...messages.map(m => m.id))
+        }
 
         if (incoming.length === 0) {
           return { content: [{ type: 'text', text: 'No new messages.' }] }
