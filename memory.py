@@ -5,7 +5,7 @@ or used by the daemon. Thread-safe, WAL mode, ACID transactions.
 
 Usage:
     from memory import AgentMemory
-    mem = AgentMemory()  # uses default path ~/.openclaw/ponder/agent.db
+    mem = AgentMemory()  # uses default path ~/.ponder/ponder/agent.db
     mem.update_state("nova", "working", "Implementing smokeping collector")
     mem.append_event("commit", "nova", {"hash": "abc123", "message": "..."})
     mem.create_task("Fix CGA 401 bug", created_by="human", assigned_to="claude")
@@ -18,7 +18,7 @@ import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
 
-DEFAULT_DB_PATH = Path(os.environ.get("PONDER_DB", str(Path.home() / ".openclaw" / "ponder" / "agent.db")))
+DEFAULT_DB_PATH = Path(os.environ.get("PONDER_DB", str(Path.home() / ".ponder" / "ponder" / "agent.db")))
 
 DEFAULT_AGENT_PROFILES = {
     "claude": {

@@ -5,7 +5,7 @@ Runs on localhost:9077 (mnemonic: 90 = memory, 77 = lucky).
 Used by AI agents and humans via browser.
 
 Start:  python daemon.py
-Stop:   kill $(cat ~/.openclaw/ponder/daemon.pid)
+Stop:   kill $(cat ~/.ponder/ponder/daemon.pid)
 
 API:
   GET  /                         Dashboard (HTML)
@@ -68,7 +68,7 @@ logging.basicConfig(
 
 PORT = int(os.environ.get("PONDER_PORT", 9077))
 DOCKER = os.environ.get("DOCKER", "").strip() == "1"
-PID_FILE = Path.home() / ".openclaw" / "ponder" / "daemon.pid"
+PID_FILE = Path.home() / ".ponder" / "ponder" / "daemon.pid"
 
 app = Flask(__name__)
 mem = AgentMemory()
