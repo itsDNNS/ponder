@@ -789,8 +789,8 @@ DASHBOARD_HTML = """<!doctype html>
     <summary style="font-size: 13px; font-weight: 600; color: #ccc; cursor: pointer; user-select: none;">Deactivated ({{ agents_deactivated|length }}) <span style="font-weight: 400; font-size: 11px; color: #ccc;">&mdash; no activity for 7d+</span></summary>
     <div style="margin-top: 10px;">
     {% for profile in agents_deactivated %}
-    <div class="agent-card" style="opacity: 0.35;display:flex;justify-content:space-between;align-items:center;" id="agent-card-{{ profile.agent_id }}">
-      <div>
+    <div class="agent-card" style="display:flex;justify-content:space-between;align-items:center;" id="agent-card-{{ profile.agent_id }}">
+      <div style="opacity:0.35;">
         <div class="agent-card-name">{{ profile.agent_id }}{% if profile.display_name and profile.display_name != profile.agent_id %} &mdash; <span class="agent-rename" onclick="renameAgent('{{ profile.agent_id }}', this)" title="Click to rename" style="cursor:pointer;border-bottom:1px dotted #ccc;">{{ profile.display_name }}</span>{% else %} <span class="agent-rename" onclick="renameAgent('{{ profile.agent_id }}', this)" title="Click to set display name" style="cursor:pointer;color:#ccc;border-bottom:1px dotted #ccc;font-size:11px;">set name</span>{% endif %}</div>
         <div class="agent-card-meta">
           <span class="muted">deactivated</span>
