@@ -733,14 +733,14 @@ DASHBOARD_HTML = """<!doctype html>
       {% set deactivated_ids = agents_deactivated|map(attribute='agent_id')|list %}
       {% for a in leaderboard if a.score > 0 and a.agent_id not in deactivated_ids %}
       {% if loop.index <= 3 %}
-      <div style="display:grid;grid-template-columns:32px 1fr repeat(4,70px) 80px;gap:8px;align-items:center;padding:10px 16px;{{ 'border-top:1px solid #f0ede6;' if not loop.first else '' }}font-size:12px;">
-        <span style="font-size:16px;font-weight:800;color:{{ '#c45a3c' if loop.index == 1 else '#999' if loop.index <= 3 else '#ccc' }};">{{ loop.index }}</span>
+      <div style="display:grid;grid-template-columns:32px 1fr repeat(4,70px) 80px;gap:8px;align-items:center;padding:10px 16px;{{ 'border-top:1px solid #f0ede6;' if not loop.first else '' }}font-size:12px;{{ 'background:linear-gradient(90deg,rgba(212,160,23,0.06),transparent);' if loop.index == 1 else 'background:linear-gradient(90deg,rgba(138,138,138,0.05),transparent);' if loop.index == 2 else 'background:linear-gradient(90deg,rgba(184,115,51,0.05),transparent);' }}">
+        <span style="font-size:16px;font-weight:800;color:{{ '#d4a017' if loop.index == 1 else '#8a8a8a' if loop.index == 2 else '#b87333' }};">{{ loop.index }}</span>
         <span style="font-family:'IBM Plex Mono',monospace;font-weight:600;">{{ a.display_name }}</span>
         <span style="text-align:center;color:#999;" title="Messages"><span style="font-weight:600;color:#1a1a1a;">{{ a.messages }}</span> msgs</span>
         <span style="text-align:center;color:#999;" title="Events"><span style="font-weight:600;color:#1a1a1a;">{{ a.events }}</span> evts</span>
         <span style="text-align:center;color:#999;" title="Tasks created"><span style="font-weight:600;color:#1a1a1a;">{{ a.tasks_created }}</span> tasks</span>
         <span style="text-align:center;color:#999;" title="Tasks done"><span style="font-weight:600;color:#1a1a1a;">{{ a.tasks_done }}</span> done</span>
-        <span style="text-align:right;font-weight:700;font-size:14px;color:{{ '#c45a3c' if loop.index == 1 else '#1a1a1a' }};">{{ a.score }} pts</span>
+        <span style="text-align:right;font-weight:700;font-size:14px;color:{{ '#d4a017' if loop.index == 1 else '#8a8a8a' if loop.index == 2 else '#b87333' }};">{{ a.score }} pts</span>
       </div>
       {% endif %}
       {% endfor %}
@@ -751,7 +751,7 @@ DASHBOARD_HTML = """<!doctype html>
   <div class="section-head"><div class="section-title">Active Agents</div></div>
   {% for profile in agents_active %}
   <div class="agent-card">
-    <div class="agent-card-name">{{ profile.agent_id }}{% if profile.display_name %} &mdash; {{ profile.display_name }}{% endif %}</div>
+    <div class="agent-card-name">{{ profile.agent_id }}{% if profile.display_name and profile.display_name != profile.agent_id %} &mdash; {{ profile.display_name }}{% endif %}</div>
     <div class="agent-card-meta">
       <span class="status-{{ profile.state.status if profile.state else 'idle' }}">{{ profile.state.status if profile.state else 'idle' }}</span>
       {% if profile.state and profile.state.current_task %}<span>{{ profile.state.current_task }}</span>{% endif %}
@@ -768,7 +768,7 @@ DASHBOARD_HTML = """<!doctype html>
     <div style="margin-top: 10px;">
     {% for profile in agents_inactive %}
     <div class="agent-card" style="opacity: 0.6;">
-      <div class="agent-card-name">{{ profile.agent_id }}{% if profile.display_name %} &mdash; {{ profile.display_name }}{% endif %}</div>
+      <div class="agent-card-name">{{ profile.agent_id }}{% if profile.display_name and profile.display_name != profile.agent_id %} &mdash; {{ profile.display_name }}{% endif %}</div>
       <div class="agent-card-meta">
         <span class="muted">inactive</span>
         {% if profile.state and profile.state.updated_at %}<span class="relative-time" data-ts="{{ profile.state.updated_at }}">{{ profile.state.updated_at }}</span>{% endif %}
@@ -785,7 +785,7 @@ DASHBOARD_HTML = """<!doctype html>
     <div style="margin-top: 10px;">
     {% for profile in agents_deactivated %}
     <div class="agent-card" style="opacity: 0.35;">
-      <div class="agent-card-name">{{ profile.agent_id }}{% if profile.display_name %} &mdash; {{ profile.display_name }}{% endif %}</div>
+      <div class="agent-card-name">{{ profile.agent_id }}{% if profile.display_name and profile.display_name != profile.agent_id %} &mdash; {{ profile.display_name }}{% endif %}</div>
       <div class="agent-card-meta">
         <span class="muted">deactivated</span>
         {% if profile.state and profile.state.updated_at %}<span class="relative-time" data-ts="{{ profile.state.updated_at }}">{{ profile.state.updated_at }}</span>{% endif %}
