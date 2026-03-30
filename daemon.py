@@ -665,16 +665,17 @@ DASHBOARD_HTML = """<!doctype html>
 
 <div id="tab-chat" class="tab-content">
   <div class="chat-shell">
-    <aside class="chat-sidebar">
+    <aside class="chat-sidebar" style="display:flex;flex-direction:column;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
         <div class="section-title" style="margin:0;">Channels</div>
         <span id="chat-sort-toggle" onclick="toggleChannelSort()" style="font-size:10px;color:#999;cursor:pointer;user-select:none;border:1px solid #e0ddd6;padding:2px 8px;border-radius:4px;background:#fff;" title="Click to toggle sort">by activity</span>
       </div>
-      <div id="chat-channel-tabs" class="chat-channel-tabs"></div>
-      <div style="margin-top: 16px;">
-        <label for="chat-quick-channel">New Channel</label>
-        <input id="chat-quick-channel" placeholder="channel name" style="margin-bottom: 6px;">
-        <button onclick="jumpToChatChannel()" style="width: 100%;">Create</button>
+      <div id="chat-channel-tabs" class="chat-channel-tabs" style="flex:1;overflow-y:auto;"></div>
+      <div style="margin-top:auto;padding-top:12px;border-top:1px solid #eae7e0;">
+        <div style="display:flex;gap:6px;">
+          <input id="chat-quick-channel" placeholder="New channel..." style="flex:1;font-size:12px;padding:6px 8px;">
+          <button onclick="jumpToChatChannel()" style="padding:6px 12px;font-size:12px;">Create</button>
+        </div>
       </div>
     </aside>
     <section class="chat-main" style="display: flex; flex-direction: column; min-height: 0;">
