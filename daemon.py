@@ -738,7 +738,7 @@ DASHBOARD_HTML = """<!doctype html>
       {% for a in top_agents %}
       <div style="flex:1;min-width:200px;background:#fff;border:1px solid {{ '#d4a017' if loop.index == 1 else '#c0c0c0' if loop.index == 2 else '#b87333' }};border-radius:12px;padding:20px;position:relative;overflow:hidden;{{ 'border-width:2px;' if loop.index == 1 else '' }}">
         <div style="position:absolute;top:-8px;right:-8px;font-size:48px;opacity:0.08;font-weight:900;">{{ loop.index }}</div>
-        <div style="font-size:28px;margin-bottom:4px;">{% if loop.index == 1 %}👑{% elif loop.index == 2 %}🥈{% else %}🥉{% endif %}</div>
+        <div style="margin-bottom:4px;">{% if loop.index == 1 %}<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#d4a017" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 6l4 6l5 -4l-2 10h-14l-2 -10l5 4z"/></svg>{% elif loop.index == 2 %}<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#8a8a8a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v4"/><path d="M10 15h4"/></svg>{% else %}<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#b87333" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v4"/><path d="M10 15h4"/></svg>{% endif %}</div>
         <div style="font-family:'IBM Plex Mono',monospace;font-size:15px;font-weight:700;margin-bottom:2px;">{{ a.display_name }}</div>
         <div style="font-size:11px;color:#999;margin-bottom:10px;">{{ a.agent_id }}</div>
         <div style="font-size:24px;font-weight:800;color:{{ '#d4a017' if loop.index == 1 else '#8a8a8a' if loop.index == 2 else '#b87333' }};margin-bottom:8px;">{{ a.score }} <span style="font-size:12px;font-weight:500;color:#999;">pts</span></div>
@@ -789,11 +789,12 @@ DASHBOARD_HTML = """<!doctype html>
     <summary style="font-size: 13px; font-weight: 600; color: #ccc; cursor: pointer; user-select: none;">Deactivated ({{ agents_deactivated|length }}) <span style="font-weight: 400; font-size: 11px; color: #ccc;">&mdash; no activity for 7d+</span></summary>
     <div style="margin-top: 10px;">
     {% for profile in agents_deactivated %}
-    <div class="agent-card" style="opacity: 0.35;">
+    <div class="agent-card" style="opacity: 0.35;position:relative;" id="agent-card-{{ profile.agent_id }}">
       <div class="agent-card-name">{{ profile.agent_id }}{% if profile.display_name and profile.display_name != profile.agent_id %} &mdash; <span class="agent-rename" onclick="renameAgent('{{ profile.agent_id }}', this)" title="Click to rename" style="cursor:pointer;border-bottom:1px dotted #ccc;">{{ profile.display_name }}</span>{% else %} <span class="agent-rename" onclick="renameAgent('{{ profile.agent_id }}', this)" title="Click to set display name" style="cursor:pointer;color:#ccc;border-bottom:1px dotted #ccc;font-size:11px;">set name</span>{% endif %}</div>
       <div class="agent-card-meta">
         <span class="muted">deactivated</span>
         {% if profile.state and profile.state.updated_at %}<span class="relative-time" data-ts="{{ profile.state.updated_at }}">{{ profile.state.updated_at }}</span>{% endif %}
+        <span onclick="deleteAgent('{{ profile.agent_id }}')" style="margin-left:auto;cursor:pointer;color:#c45a3c;font-size:11px;opacity:2;" title="Remove agent (keeps knowledge and chat)">remove</span>
       </div>
     </div>
     {% endfor %}
@@ -1403,6 +1404,18 @@ async function renameAgent(agentId, el) {
   }
 }
 
+async function deleteAgent(agentId) {
+  if (!confirm('Remove ' + agentId + '? Chat messages, knowledge, and events will be kept.')) return;
+  try {
+    var res = await fetch('/api/agents/' + encodeURIComponent(agentId), { method: 'DELETE' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    var card = document.getElementById('agent-card-' + agentId);
+    if (card) card.remove();
+  } catch(e) {
+    alert('Failed: ' + e.message);
+  }
+}
+
 async function sendChatMessage() {
   const sender = document.getElementById('chat-sender').value.trim();
   const target = document.getElementById('chat-target').value.trim();
@@ -1732,6 +1745,12 @@ def api_agents_upsert(agent_id):
         metadata=data.get("metadata"),
     )
     return jsonify({"ok": True, "profile": profile})
+
+
+@app.route("/api/agents/<agent_id>", methods=["DELETE"])
+def api_agents_delete(agent_id):
+    mem.delete_agent(agent_id)
+    return jsonify({"ok": True})
 
 
 # -- API: Canonical Onboarding -------------------------------------------

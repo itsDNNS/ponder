@@ -421,6 +421,13 @@ class AgentMemory:
             conn.commit()
         return self.get_agent_profile(agent_id, include_state=True)
 
+    def delete_agent(self, agent_id):
+        """Remove agent profile and state entirely."""
+        with self._connect() as conn:
+            conn.execute("DELETE FROM agent_profiles WHERE agent_id = ?", (agent_id,))
+            conn.execute("DELETE FROM agent_state WHERE agent_id = ?", (agent_id,))
+            conn.commit()
+
     def create_task(self, title, created_by, description=None, assigned_to=None,
                     priority=0, payload=None):
         """Create a new task. Returns task id."""
