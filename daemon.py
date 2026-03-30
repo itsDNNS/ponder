@@ -666,7 +666,10 @@ DASHBOARD_HTML = """<!doctype html>
 <div id="tab-chat" class="tab-content">
   <div class="chat-shell">
     <aside class="chat-sidebar">
-      <div class="section-title" style="margin-bottom: 8px;">Channels</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <div class="section-title" style="margin:0;">Channels</div>
+        <span id="chat-sort-toggle" onclick="toggleChannelSort()" style="font-size:10px;color:#bbb;cursor:pointer;user-select:none;" title="Toggle sort">by activity</span>
+      </div>
       <div id="chat-channel-tabs" class="chat-channel-tabs"></div>
       <div style="margin-top: 16px;">
         <label for="chat-quick-channel">Open Channel</label>
@@ -974,6 +977,22 @@ function setActiveChatChannel(channel, options) {
   }
 }
 
+function getChannelSort() {
+  return localStorage.getItem('ponder_channel_sort') || 'activity';
+}
+function toggleChannelSort() {
+  var current = getChannelSort();
+  var next = current === 'activity' ? 'alpha' : 'activity';
+  localStorage.setItem('ponder_channel_sort', next);
+  document.getElementById('chat-sort-toggle').textContent = next === 'activity' ? 'by activity' : 'A-Z';
+  renderChatChannelTabs();
+}
+(function() {
+  var s = getChannelSort();
+  var el = document.getElementById('chat-sort-toggle');
+  if (el) el.textContent = s === 'activity' ? 'by activity' : 'A-Z';
+})();
+
 function getHiddenChannels() {
   try { return JSON.parse(localStorage.getItem('ponder_hidden_channels') || '[]'); } catch(e) { return []; }
 }
@@ -1002,7 +1021,10 @@ function renderChatChannelTabs() {
       <span class="chat-channel-count">${totalMessages}</span>
     </button>
   `;
-  const visible = chatState.channelSummaries.filter((item) => item.channel !== 'all' && hidden.indexOf(item.channel) === -1);
+  var visible = chatState.channelSummaries.filter((item) => item.channel !== 'all' && hidden.indexOf(item.channel) === -1);
+  if (getChannelSort() === 'alpha') {
+    visible = visible.slice().sort((a, b) => a.channel.localeCompare(b.channel));
+  }
   const hiddenItems = chatState.channelSummaries.filter((item) => item.channel !== 'all' && hidden.indexOf(item.channel) !== -1);
 
   const channelTabs = visible.map((item) => {
@@ -1049,6 +1071,14 @@ function renderMarkdown(text) {
   s = s.replace(new RegExp('[*]([^*]+)[*]', 'g'), '<em>$1</em>');
   s = s.replace(new RegExp('^- (.+)$', 'gm'), '<div style="padding-left:12px;">&bull; $1</div>');
   s = s.replace(new RegExp('^\\d+[.] (.+)$', 'gm'), function(m, p1) { return '<div style="padding-left:12px;">' + m.match(new RegExp('^\\d+'))[0] + '. ' + p1 + '</div>'; });
+  var imgIdx = 0, imgStore = {};
+  s = s.replace(new RegExp('(https?://[^\\s<]+[.](png|jpg|jpeg|gif|webp|svg)([?][^\\s<]*)?)', 'gi'), function(url) {
+    var key = '%%IMG' + (imgIdx++) + '%%';
+    imgStore[key] = '<img src="' + url + '" style="max-width:100%;max-height:300px;border-radius:6px;margin:4px 0;display:block;" loading="lazy">';
+    return key;
+  });
+  s = s.replace(new RegExp('(https?://[^\\s<]+)', 'g'), '<a href="$1" target="_blank" rel="noopener" style="color:#c45a3c;word-break:break-all;">$1</a>');
+  Object.keys(imgStore).forEach(function(key) { s = s.replace(key, imgStore[key]); });
   s = s.replace(new RegExp('\\n', 'g'), '<br>');
   return s;
 }
