@@ -556,22 +556,23 @@ DASHBOARD_HTML = """<!doctype html>
     </div>
     <div class="hero-content">
       <h1 class="hero-title">
-        <span class="count">{{ stats.agents }}</span> agent{{ 's' if stats.agents != 1 else '' }} working
+        {% set active_count = states|selectattr('status', 'in', ['active', 'working'])|list|length %}<span class="count">{{ active_count }}</span> agent{{ 's' if active_count != 1 else '' }} working
       </h1>
     </div>
   </div>
 
   <!-- Agent Strip -->
   <div class="hero-agents">
-    {% for s in states %}
+    {% for s in states if s.status in ('active', 'working') %}
     <div class="hero-agent">
-      <div class="hero-agent-ring {{ 'active' if s.status in ('active', 'working') else 'idle' }}">{{ s.agent_id[:2]|upper }}</div>
+      <div class="hero-agent-ring active">{{ s.agent_id[:2]|upper }}</div>
       <div class="hero-agent-info">
-        <div class="hero-agent-name {{ 'idle' if s.status not in ('active', 'working') else '' }}">{{ s.agent_id }}</div>
-        <div class="hero-agent-task">{{ s.current_task or 'idle' }} &middot; {{ s.updated_at }}</div>
+        <div class="hero-agent-name">{{ s.agent_id }}</div>
+        <div class="hero-agent-task">{{ s.current_task or 'working' }} &middot; <span class="relative-time" data-ts="{{ s.updated_at }}">{{ s.updated_at }}</span></div>
       </div>
     </div>
     {% endfor %}
+    {% if not states|selectattr('status', 'in', ['active', 'working'])|list %}<div class="muted">All agents idle</div>{% endif %}
   </div>
 
   <!-- Tabs -->
@@ -620,7 +621,7 @@ DASHBOARD_HTML = """<!doctype html>
       <span class="tl-who">{{ e.source_agent }}</span>
       <span class="tl-text">
         <strong>{{ e.event_type }}</strong>{% if e.target_agent %} &rarr; {{ e.target_agent }}{% endif %}
-        {% if e.data %} &mdash; {{ e.data[:120] }}{% endif %}
+        {% if e.data %} &mdash; {{ e.data[:80] }}{% endif %}
       </span>
     </div>
     {% endfor %}
@@ -1408,8 +1409,8 @@ def dashboard():
         DASHBOARD_HTML,
         stats=mem.stats(),
         states=mem.get_all_states(stale_days=7),
-        tasks=mem.list_tasks(include_done=False, limit=20),
-        events=mem.get_latest_events(limit=30),
+        tasks=mem.list_tasks(include_done=False, limit=5),
+        events=mem.get_latest_events(limit=10),
         chat_messages=mem.get_chat_messages(limit=50),
         chat_channels=mem.list_chat_channels(limit=20),
         agent_profiles=agent_profiles,
