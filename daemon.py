@@ -672,9 +672,9 @@ DASHBOARD_HTML = """<!doctype html>
       </div>
       <div id="chat-channel-tabs" class="chat-channel-tabs"></div>
       <div style="margin-top: 16px;">
-        <label for="chat-quick-channel">Open Channel</label>
-        <input id="chat-quick-channel" placeholder="general" style="margin-bottom: 6px;">
-        <button onclick="jumpToChatChannel()" style="width: 100%;">Open</button>
+        <label for="chat-quick-channel">New Channel</label>
+        <input id="chat-quick-channel" placeholder="channel name" style="margin-bottom: 6px;">
+        <button onclick="jumpToChatChannel()" style="width: 100%;">Create</button>
       </div>
     </aside>
     <section class="chat-main" style="display: flex; flex-direction: column; min-height: 0;">
