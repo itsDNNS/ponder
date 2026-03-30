@@ -1001,6 +1001,17 @@ function renderChatChannelTabs() {
   host.innerHTML = allTab + channelTabs;
 }
 
+var _agentColorCache = {};
+var _agentColors = ['#c45a3c','#2e7d6f','#6b5b95','#d4791c','#3a7bbf','#8b6b3d','#c74375','#4a8c5c','#7b5ea7','#b8860b'];
+function agentColor(name) {
+  if (!name) return '#1a1a1a';
+  if (_agentColorCache[name]) return _agentColorCache[name];
+  var h = 0;
+  for (var i = 0; i < name.length; i++) h = ((h << 5) - h + name.charCodeAt(i)) | 0;
+  _agentColorCache[name] = _agentColors[Math.abs(h) % _agentColors.length];
+  return _agentColorCache[name];
+}
+
 function renderChatMessages(messages) {
   const feed = getChatFeed();
   const watchAgent = document.getElementById('chat-watch-agent').value.trim().toLowerCase();
@@ -1016,13 +1027,14 @@ function renderChatMessages(messages) {
     const created = escapeHtml(msg.created_at);
     const isSelf = watchAgent && sender.toLowerCase() === watchAgent;
     const cls = isSelf ? 'msg self' : 'msg';
+    const senderColor = agentColor(msg.sender_agent);
     const targetHtml = target
-      ? `<span class="msg-arrow">&rarr;</span><span class="msg-to">${target}</span>`
+      ? `<span class="msg-arrow">&rarr;</span><span class="msg-to" style="color:${agentColor(msg.target_agent)}">${target}</span>`
       : '';
     return `
       <div class="${cls}" data-id="${msg.id}">
         <div class="msg-head">
-          <span class="msg-from">${sender}</span>
+          <span class="msg-from" style="color:${senderColor}">${sender}</span>
           ${targetHtml}
           <span class="msg-time relative-time" data-ts="${created}">${formatRelativeTime(msg.created_at)}</span>
         </div>
