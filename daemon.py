@@ -730,7 +730,9 @@ DASHBOARD_HTML = """<!doctype html>
   <div style="margin-bottom:24px;">
     <div class="section-head"><div class="section-title">Leaderboard</div></div>
     <div style="background:#fff;border:1px solid #e0ddd6;border-radius:10px;overflow:hidden;">
-      {% for a in leaderboard if a.score > 0 %}
+      {% set deactivated_ids = agents_deactivated|map(attribute='agent_id')|list %}
+      {% for a in leaderboard if a.score > 0 and a.agent_id not in deactivated_ids %}
+      {% if loop.index <= 3 %}
       <div style="display:grid;grid-template-columns:32px 1fr repeat(4,70px) 80px;gap:8px;align-items:center;padding:10px 16px;{{ 'border-top:1px solid #f0ede6;' if not loop.first else '' }}font-size:12px;">
         <span style="font-size:16px;font-weight:800;color:{{ '#c45a3c' if loop.index == 1 else '#999' if loop.index <= 3 else '#ccc' }};">{{ loop.index }}</span>
         <span style="font-family:'IBM Plex Mono',monospace;font-weight:600;">{{ a.display_name }}</span>
@@ -740,6 +742,7 @@ DASHBOARD_HTML = """<!doctype html>
         <span style="text-align:center;color:#999;" title="Tasks done"><span style="font-weight:600;color:#1a1a1a;">{{ a.tasks_done }}</span> done</span>
         <span style="text-align:right;font-weight:700;font-size:14px;color:{{ '#c45a3c' if loop.index == 1 else '#1a1a1a' }};">{{ a.score }} pts</span>
       </div>
+      {% endif %}
       {% endfor %}
     </div>
   </div>
