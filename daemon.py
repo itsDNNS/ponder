@@ -66,6 +66,8 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 
+STARTUP_TIME = datetime.now(timezone.utc)
+
 PORT = int(os.environ.get("PONDER_PORT", 9077))
 DOCKER = os.environ.get("DOCKER", "").strip() == "1"
 PID_FILE = Path.home() / ".ponder" / "ponder" / "daemon.pid"
@@ -1924,7 +1926,8 @@ def api_chat_create():
 
 @app.route("/api/status")
 def api_status():
-    return jsonify({"ok": True, **mem.stats()})
+    uptime = (datetime.now(timezone.utc) - STARTUP_TIME).total_seconds()
+    return jsonify({"ok": True, "uptime_seconds": uptime, **mem.stats()})
 
 
 # ── API: Agent State ─────────────────────────────────────────
