@@ -2345,17 +2345,18 @@ def api_observations_summary(session_id):
 
 @app.route("/api/maintenance", methods=["POST"])
 def api_maintenance():
-    cleaned_wm = mem.cleanup_expired_wm()
-    cleaned_tasks = mem.cleanup_done_tasks(days=7)
-    decayed = mem.decay_knowledge(days_threshold=30, decay_rate=0.05)
-    cleaned_obs = mem.cleanup_old_observations(days=30)
-    return jsonify({
-        "ok": True,
-        "cleaned_wm": cleaned_wm,
-        "cleaned_tasks": cleaned_tasks,
-        "decayed_knowledge": decayed,
-        "cleaned_observations": cleaned_obs,
-    })
+    data = request.get_json(force=True) if request.data else {}
+    only = data.get("only")
+    result = {"ok": True}
+    if not only or only == "wm":
+        result["cleaned_wm"] = mem.cleanup_expired_wm()
+    if not only or only == "tasks":
+        result["cleaned_tasks"] = mem.cleanup_done_tasks(days=7)
+    if not only or only == "knowledge":
+        result["decayed_knowledge"] = mem.decay_knowledge(days_threshold=30, decay_rate=0.05)
+    if not only or only == "observations":
+        result["cleaned_observations"] = mem.cleanup_old_observations(days=30)
+    return jsonify(result)
 
 
 # ── API: Cross-Tier Context ─────────────────────────────────
