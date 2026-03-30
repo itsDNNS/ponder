@@ -5,7 +5,7 @@
  * Connects to a Ponder instance and provides:
  * - Chat notifications (agent-to-agent and human-to-agent)
  * - Tools for replying, updating state, managing tasks
- * - Live polling for new messages
+ * - Live polling for new messages with push notifications
  *
  * Config via env:
  *   PONDER_URL        Base URL of the Ponder server (default: http://localhost:9077)
@@ -31,6 +31,20 @@ process.on('uncaughtException', err => {
   process.stderr.write(`ponder mcp: uncaught exception: ${err}\n`)
 })
 
+// ── Shared state ─────────────────────────────────────────
+
+let lastSeenMessageId = 0
+const agentIdLower = AGENT_ID.toLowerCase()
+
+type ChatMessage = {
+  id: number
+  sender_agent: string
+  target_agent: string | null
+  channel: string
+  body: string
+  created_at: string
+}
+
 // ── HTTP helpers ──────────────────────────────────────────
 
 async function api(method: string, path: string, body?: unknown): Promise<unknown> {
@@ -48,15 +62,18 @@ async function api(method: string, path: string, body?: unknown): Promise<unknow
   return res.json()
 }
 
-function escapeXml(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-}
-
 // ── MCP Server ───────────────────────────────────────────
 
 const mcp = new Server(
-  { name: 'ponder', version: '0.1.0' },
-  { capabilities: { tools: {} } },
+  { name: 'ponder', version: '0.2.0' },
+  {
+    capabilities: {
+      tools: {},
+      experimental: {
+        'claude/channel': {},
+      },
+    },
+  },
 )
 
 // ── Tools ────────────────────────────────────────────────
@@ -157,6 +174,16 @@ mcp.setRequestHandler(ListToolsRequestSchema, async () => ({
       },
     },
     {
+      name: 'get_messages',
+      description: 'Fetch new chat messages from Ponder since last check. Use as fallback if push notifications are not arriving.',
+      inputSchema: {
+        type: 'object' as const,
+        properties: {
+          channel: { type: 'string', description: 'Optional: filter by channel' },
+        },
+      },
+    },
+    {
       name: 'get_context',
       description: 'Get cross-tier context from Ponder for a topic.',
       inputSchema: {
@@ -175,7 +202,7 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
   try {
     switch (name) {
       case 'reply': {
-        const result = await api('POST', '/api/chat', {
+        await api('POST', '/api/chat', {
           sender_agent: AGENT_ID,
           channel: args!.channel,
           body: args!.body,
@@ -233,22 +260,40 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
       }
 
       case 'handoff': {
-        // Create handoff via API
         const result = await api('POST', '/api/handoff', {
           from_agent: AGENT_ID,
           to_agent: args!.to_agent,
           title: args!.title,
           description: args!.description || null,
         }) as { task_id: number }
-        // Also post to chat channel
         const channel = args!.channel || 'general'
-        await api('POST', '/api/chat', {
+        void api('POST', '/api/chat', {
           sender_agent: AGENT_ID,
           target_agent: args!.to_agent,
           channel,
           body: `Handoff: ${args!.title}${args!.description ? '\n\n' + args!.description : ''}`,
-        })
+        }).catch(err => process.stderr.write(`ponder: handoff chat post failed: ${err}\n`))
         return { content: [{ type: 'text', text: `Handoff to ${args!.to_agent}: task #${result.task_id}, posted to #${channel}` }] }
+      }
+
+      case 'get_messages': {
+        const sinceParam = lastSeenMessageId > 0 ? `&since=${lastSeenMessageId}` : ''
+        const channelParam = args?.channel ? `&channel=${encodeURIComponent(args.channel as string)}` : ''
+        const messages = await api('GET', `/api/chat?agent_id=${encodeURIComponent(AGENT_ID)}&limit=50${sinceParam}${channelParam}`) as ChatMessage[]
+
+        const incoming = messages.filter(m => m.sender_agent.toLowerCase() !== agentIdLower)
+        if (messages.length > 0) {
+          lastSeenMessageId = Math.max(lastSeenMessageId, ...messages.map(m => m.id))
+        }
+
+        if (incoming.length === 0) {
+          return { content: [{ type: 'text', text: 'No new messages.' }] }
+        }
+
+        const formatted = incoming.map(m =>
+          `[${m.created_at}] #${m.channel} ${m.sender_agent}${m.target_agent ? ` -> ${m.target_agent}` : ''}: ${m.body}`
+        ).join('\n')
+        return { content: [{ type: 'text', text: formatted }] }
       }
 
       case 'get_context': {
@@ -265,63 +310,40 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
   }
 })
 
-// ── Chat Polling (Channel Notifications) ─────────────────
-
-let lastSeenMessageId = 0
+// ── Chat Polling (Push Notifications) ────────────────────
 
 async function pollChat(): Promise<void> {
   try {
-    const messages = await api('GET', `/api/chat?limit=20`) as Array<{
-      id: number
-      sender_agent: string
-      target_agent: string | null
-      channel: string
-      body: string
-      created_at: string
-    }>
+    const sinceParam = lastSeenMessageId > 0 ? `&since=${lastSeenMessageId}` : ''
+    const messages = await api('GET', `/api/chat?agent_id=${encodeURIComponent(AGENT_ID)}&limit=100${sinceParam}`) as ChatMessage[]
 
-    // On first poll, just record the latest ID
-    if (lastSeenMessageId === 0 && messages.length > 0) {
-      lastSeenMessageId = messages[messages.length - 1].id
-      return
-    }
-
-    // Find new messages since last poll
-    const newMessages = messages.filter(m => m.id > lastSeenMessageId)
-    if (newMessages.length > 0) {
-      lastSeenMessageId = newMessages[newMessages.length - 1].id
-    }
-
-    // Notify for messages targeted at this agent OR broadcast messages from other agents
-    for (const m of newMessages) {
-      if (m.sender_agent === AGENT_ID) continue // skip own messages
-
-      const isTargeted = m.target_agent?.toLowerCase() === AGENT_ID.toLowerCase()
-      const isMention = m.body.includes(`@${AGENT_ID}`)
-
-      if (isTargeted || isMention) {
-        // Build channel notification (same format as Telegram plugin)
-        let meta = `chat_id="${m.channel}" message_id="${m.id}" user="${m.sender_agent}" ts="${m.created_at}"`
-        const content = m.body
-
-        void mcp.notification({
-          method: 'notifications/claude/channel',
-          params: {
-            content,
-            meta: {
-              chat_id: m.channel,
-              message_id: String(m.id),
-              user: m.sender_agent,
-              ts: m.created_at,
-            },
-          },
-        })
-
-        process.stderr.write(`ponder: notified ${AGENT_ID} of message #${m.id} from ${m.sender_agent}\n`)
+    for (const m of messages) {
+      if (m.sender_agent.toLowerCase() === agentIdLower) {
+        lastSeenMessageId = Math.max(lastSeenMessageId, m.id)
+        continue
       }
+
+      mcp.notification({
+        method: 'notifications/claude/channel',
+        params: {
+          content: m.body,
+          meta: {
+            chat_id: m.channel,
+            message_id: String(m.id),
+            user: m.sender_agent,
+            ts: m.created_at,
+            ...(m.target_agent ? { target_agent: m.target_agent } : {}),
+          },
+        },
+      }).catch(err => {
+        process.stderr.write(`ponder: notification delivery failed: ${err}\n`)
+      })
+
+      lastSeenMessageId = Math.max(lastSeenMessageId, m.id)
+      process.stderr.write(`ponder: forwarded #${m.id} from ${m.sender_agent} in #${m.channel}\n`)
     }
   } catch (err) {
-    // Silent on poll errors (server might be temporarily unreachable)
+    process.stderr.write(`ponder: poll error: ${err}\n`)
   }
 }
 
@@ -338,15 +360,28 @@ async function main() {
     process.stderr.write(`ponder: warning: could not set initial state (server unreachable?)\n`)
   }
 
-  // Start chat polling
-  setInterval(pollChat, POLL_MS)
-  pollChat() // initial poll
-
-  // Connect MCP
+  // Connect MCP first, then start polling
   const transport = new StdioServerTransport()
   await mcp.connect(transport)
-
   process.stderr.write(`ponder mcp: connected as ${AGENT_ID} to ${PONDER_URL}\n`)
+
+  // Seed lastSeenMessageId so we only forward messages arriving after startup
+  try {
+    const recent = await api('GET', `/api/chat?agent_id=${encodeURIComponent(AGENT_ID)}&limit=1`) as ChatMessage[]
+    if (recent.length > 0) {
+      lastSeenMessageId = recent[recent.length - 1].id
+    }
+  } catch {
+    process.stderr.write(`ponder: warning: could not seed message cursor\n`)
+  }
+
+  // Start polling loop after connection is established
+  void (async () => {
+    while (true) {
+      await new Promise(r => setTimeout(r, POLL_MS))
+      await pollChat()
+    }
+  })()
 }
 
 main().catch(err => {

@@ -613,7 +613,7 @@ class AgentMemory:
             query += " AND channel = ?"
             params.append(channel)
         if agent_id:
-            query += " AND (sender_agent = ? OR target_agent = ? OR target_agent IS NULL)"
+            query += " AND (LOWER(sender_agent) = LOWER(?) OR LOWER(target_agent) = LOWER(?) OR target_agent IS NULL)"
             params.extend([agent_id, agent_id])
         if before_id:
             query += " ORDER BY id DESC LIMIT ?"
