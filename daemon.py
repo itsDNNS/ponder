@@ -609,22 +609,54 @@ DASHBOARD_HTML = """<!doctype html>
     {% if not tasks %}<div class="muted">No tasks yet</div>{% endif %}
   </div>
 
-  <h2>Recent Events</h2>
-  <table>
-    <tr><th>#</th><th>Type</th><th>Source</th><th>Target</th><th>Data</th><th>Time</th></tr>
+  <div class="section">
+    <div class="section-head">
+      <div class="section-title">Recent Activity</div>
+      <a class="section-link">all events &rarr;</a>
+    </div>
     {% for e in events %}
-    <tr>
-      <td>{{ e.id }}</td>
-      <td class="event-type">{{ e.event_type }}</td>
-      <td class="agent">{{ e.source_agent }}</td>
-      <td class="agent">{{ e.target_agent or '*' }}</td>
-      <td><pre>{{ e.data or '-' }}</pre></td>
-      <td>{{ e.created_at }}</td>
-    </tr>
+    <div class="tl-item">
+      <span class="tl-time"><span class="relative-time" data-ts="{{ e.created_at }}">{{ e.created_at }}</span></span>
+      <span class="tl-who">{{ e.source_agent }}</span>
+      <span class="tl-text">
+        <strong>{{ e.event_type }}</strong>{% if e.target_agent %} &rarr; {{ e.target_agent }}{% endif %}
+        {% if e.data %} &mdash; {{ e.data[:120] }}{% endif %}
+      </span>
+    </div>
     {% endfor %}
-    {% if not events %}<tr><td colspan="6" class="muted">No events yet</td></tr>{% endif %}
-  </table>
-</div>
+    {% if not events %}<div class="muted">No events yet</div>{% endif %}
+  </div>
+
+  <div class="section">
+    <div class="section-head">
+      <div class="section-title">Chat</div>
+      <a class="section-link" onclick="showTab('chat', findTabButton('chat'))">open full chat &rarr;</a>
+    </div>
+    <div class="chat-preview">
+      <div class="chat-header">
+        <div class="chat-channel">#{{ default_chat_channel if default_chat_channel != 'all' else 'general' }}</div>
+        <div class="chat-channel-list">
+          {% for ch in chat_channels[:4] %}
+          <span class="{{ 'active' if ch.channel == default_chat_channel else '' }}">{{ '#' + ch.channel }}</span>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="chat-messages">
+        {% for m in chat_messages[-3:] %}
+        <div class="msg {{ 'self' if m.sender_agent == default_onboarding_agent else '' }}">
+          <div class="msg-head">
+            <span class="msg-from">{{ m.sender_agent }}</span>
+            {% if m.target_agent %}<span class="msg-arrow">&rarr;</span><span class="msg-to">{{ m.target_agent }}</span>{% endif %}
+            <span class="msg-time"><span class="relative-time" data-ts="{{ m.created_at }}">{{ m.created_at }}</span></span>
+          </div>
+          <div class="msg-body">{{ m.body[:200] }}</div>
+        </div>
+        {% endfor %}
+        {% if not chat_messages %}<div class="muted">No messages yet</div>{% endif %}
+      </div>
+    </div>
+  </div>
+</div><!-- end tab-overview -->
 
 <div id="tab-chat" class="tab-content">
   <div class="chat-shell">
