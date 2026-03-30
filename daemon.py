@@ -836,7 +836,8 @@ DASHBOARD_HTML = """<!doctype html>
 const INITIAL_CHAT_MESSAGES = {{ chat_messages|tojson }};
 const INITIAL_CHAT_CHANNELS = {{ chat_channels|tojson }};
 const CHAT_POLL_INTERVAL_MS = 3000;
-const TAB_NAMES = ['overview', 'chat', 'agents', 'working', 'episodes', 'knowledge', 'onboarding'];
+const TAB_NAMES = ['overview', 'chat', 'agents', 'knowledge', 'system'];
+const TAB_REDIRECTS = { 'working': 'system', 'episodes': 'system', 'onboarding': 'system' };
 const chatState = {
   activeChannel: '{{ default_chat_channel|replace("'", "\\'") }}',
   channelSummaries: INITIAL_CHAT_CHANNELS,
@@ -856,7 +857,8 @@ function getHashState() {
     return { tab: 'overview', chatChannel: null };
   }
   const [rawTab, ...rest] = hash.split('/');
-  const tab = rawTab.toLowerCase();
+  let tab = rawTab.toLowerCase();
+  if (TAB_REDIRECTS[tab]) tab = TAB_REDIRECTS[tab];
   if (!TAB_NAMES.includes(tab)) {
     return { tab: 'overview', chatChannel: null };
   }
@@ -916,6 +918,18 @@ function copyText(btn, id) {
       btn.classList.remove('copied');
     }, 1600);
   });
+}
+
+function formatRelativeTime(ts) {
+  if (!ts) return '';
+  var d = new Date(ts.replace(' ', 'T') + (ts.includes('+') || ts.includes('Z') ? '' : 'Z'));
+  if (isNaN(d)) return ts;
+  var diff = Math.floor((Date.now() - d.getTime()) / 1000);
+  if (diff < 60) return 'just now';
+  if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+  if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+  var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return months[d.getMonth()] + ' ' + d.getDate() + ', ' + String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
 }
 
 function escapeHtml(value) {
@@ -1007,7 +1021,7 @@ function renderChatMessages(messages) {
         <div class="msg-head">
           <span class="msg-from">${sender}</span>
           ${targetHtml}
-          <span class="msg-time">${created}</span>
+          <span class="msg-time relative-time" data-ts="${created}">${formatRelativeTime(msg.created_at)}</span>
         </div>
         <div class="msg-body">${body}</div>
       </div>
@@ -1252,6 +1266,17 @@ refreshChatChannels();
 refreshChatFeed({ forceScroll: true });
 startChatPolling();
 updateFollowStateLabel();
+function updateRelativeTimes() {
+  document.querySelectorAll('.relative-time').forEach(function(el) {
+    var ts = el.getAttribute('data-ts');
+    if (ts) {
+      el.textContent = formatRelativeTime(ts);
+      el.title = ts;
+    }
+  });
+}
+updateRelativeTimes();
+setInterval(updateRelativeTimes, 30000);
 syncTabFromHash();
 </script>
 </div>
