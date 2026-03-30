@@ -974,8 +974,27 @@ function setActiveChatChannel(channel, options) {
   }
 }
 
+function getHiddenChannels() {
+  try { return JSON.parse(localStorage.getItem('ponder_hidden_channels') || '[]'); } catch(e) { return []; }
+}
+function setHiddenChannels(list) {
+  localStorage.setItem('ponder_hidden_channels', JSON.stringify(list));
+}
+function hideChannel(ch) {
+  var hidden = getHiddenChannels();
+  if (hidden.indexOf(ch) === -1) hidden.push(ch);
+  setHiddenChannels(hidden);
+  if (chatState.activeChannel === ch) setActiveChatChannel('all');
+  renderChatChannelTabs();
+}
+function unhideChannel(ch) {
+  setHiddenChannels(getHiddenChannels().filter(function(c) { return c !== ch; }));
+  renderChatChannelTabs();
+}
+
 function renderChatChannelTabs() {
   const host = document.getElementById('chat-channel-tabs');
+  const hidden = getHiddenChannels();
   const totalMessages = chatState.channelSummaries.reduce((sum, item) => sum + (item.message_count || 0), 0);
   const allTab = `
     <button class="chat-channel-tab ${chatState.activeChannel === 'all' ? 'active' : ''}" type="button" data-channel="all">
@@ -983,17 +1002,43 @@ function renderChatChannelTabs() {
       <span class="chat-channel-count">${totalMessages}</span>
     </button>
   `;
-  const channelTabs = chatState.channelSummaries.filter((item) => item.channel !== 'all').map((item) => {
+  const visible = chatState.channelSummaries.filter((item) => item.channel !== 'all' && hidden.indexOf(item.channel) === -1);
+  const hiddenItems = chatState.channelSummaries.filter((item) => item.channel !== 'all' && hidden.indexOf(item.channel) !== -1);
+
+  const channelTabs = visible.map((item) => {
     const channel = escapeHtml(item.channel);
     const activeClass = item.channel === chatState.activeChannel ? 'active' : '';
     return `
       <button class="chat-channel-tab ${activeClass}" type="button" data-channel="${channel}">
         <span class="chat-channel-name">#${channel}</span>
-        <span class="chat-channel-count">${item.message_count}</span>
+        <span style="display:flex;align-items:center;gap:6px;">
+          <span class="chat-channel-count">${item.message_count}</span>
+          <span class="chat-channel-hide" onclick="event.stopPropagation();hideChannel('${channel}')" title="Hide channel" style="color:#ccc;font-size:14px;line-height:1;cursor:pointer;">&times;</span>
+        </span>
       </button>
     `;
   }).join('');
-  host.innerHTML = allTab + channelTabs;
+
+  var hiddenHtml = '';
+  if (hiddenItems.length) {
+    var hiddenTabs = hiddenItems.map((item) => {
+      const channel = escapeHtml(item.channel);
+      return `
+        <button class="chat-channel-tab" type="button" style="opacity:0.5;" onclick="unhideChannel('${channel}')">
+          <span class="chat-channel-name">#${channel}</span>
+          <span class="chat-channel-count">${item.message_count}</span>
+        </button>
+      `;
+    }).join('');
+    hiddenHtml = `
+      <details style="margin-top:8px;">
+        <summary style="font-size:11px;color:#999;cursor:pointer;">Hidden (${hiddenItems.length})</summary>
+        <div style="margin-top:4px;display:flex;flex-direction:column;gap:4px;">${hiddenTabs}</div>
+      </details>
+    `;
+  }
+
+  host.innerHTML = allTab + channelTabs + hiddenHtml;
 }
 
 function renderMarkdown(text) {
