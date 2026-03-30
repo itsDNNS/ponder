@@ -75,6 +75,658 @@ PID_FILE = Path.home() / ".ponder" / "ponder" / "daemon.pid"
 app = Flask(__name__)
 mem = AgentMemory()
 
+# ── Setup Wizard ────────────────────────────────────────────
+
+WIZARD_HTML = """<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ponder Setup</title>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800;900&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Figtree', sans-serif; background: #f5f3ef; color: #1a1a1a; }
+
+  .wizard-page {
+    min-height: 100vh;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 24px;
+    position: relative;
+  }
+  .wizard-page.active { display: flex; }
+
+  .wizard-progress {
+    position: absolute;
+    top: 32px;
+    display: flex;
+    gap: 8px;
+  }
+  .wizard-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: #e0ddd6;
+    transition: background 0.3s;
+  }
+  .wizard-dot.active { background: #c45a3c; }
+  .wizard-dot.done { background: #1a1a1a; }
+
+  .wizard-content {
+    max-width: 560px;
+    width: 100%;
+    text-align: center;
+  }
+
+  .wizard-title {
+    font-size: 42px;
+    font-weight: 800;
+    line-height: 1.1;
+    margin-bottom: 16px;
+    letter-spacing: -0.5px;
+  }
+
+  .wizard-subtitle {
+    font-size: 17px;
+    color: #666;
+    line-height: 1.6;
+    margin-bottom: 40px;
+  }
+
+  .wizard-card {
+    background: #fff;
+    border: 1px solid #e0ddd6;
+    border-radius: 14px;
+    padding: 32px;
+    text-align: left;
+    margin-bottom: 32px;
+  }
+
+  .wizard-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: #999;
+    font-weight: 600;
+    margin-bottom: 8px;
+  }
+
+  .wizard-hint {
+    font-size: 12px;
+    color: #999;
+    margin-top: 6px;
+    line-height: 1.5;
+  }
+
+  .wizard-input {
+    width: 100%;
+    padding: 12px 16px;
+    border: 1px solid #e0ddd6;
+    border-radius: 8px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 15px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .wizard-input:focus { border-color: #c45a3c; }
+
+  .wizard-input-normal {
+    width: 100%;
+    padding: 12px 16px;
+    border: 1px solid #e0ddd6;
+    border-radius: 8px;
+    font-family: 'Figtree', sans-serif;
+    font-size: 15px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .wizard-input-normal:focus { border-color: #c45a3c; }
+
+  .wizard-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 14px 32px;
+    background: #1a1a1a;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: 'Figtree', sans-serif;
+    transition: transform 0.1s;
+  }
+  .wizard-btn:hover { transform: translateY(-1px); }
+  .wizard-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+  .wizard-btn-secondary {
+    background: transparent;
+    color: #999;
+    border: 1px solid #e0ddd6;
+  }
+
+  .wizard-code {
+    background: #1a1a1a;
+    color: #e0ddd6;
+    border-radius: 10px;
+    padding: 20px 24px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    line-height: 1.8;
+    text-align: left;
+    position: relative;
+    overflow-x: auto;
+    margin-bottom: 16px;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  .copy-badge {
+    position: absolute;
+    top: 12px; right: 12px;
+    padding: 4px 12px;
+    background: rgba(255,255,255,0.1);
+    border-radius: 6px;
+    font-size: 11px;
+    color: #999;
+    cursor: pointer;
+    border: none;
+    font-family: 'Figtree', sans-serif;
+    transition: background 0.2s, color 0.2s;
+  }
+  .copy-badge:hover { background: rgba(255,255,255,0.2); color: #fff; }
+
+  .waiting-indicator {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 20px;
+    color: #999;
+    font-size: 14px;
+  }
+
+  .pulse-ring {
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    background: #c45a3c;
+    animation: pulse 2s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 0.4; transform: scale(0.8); }
+    50% { opacity: 1; transform: scale(1.2); }
+  }
+
+  .success-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 20px;
+    background: #d4edda;
+    color: #155724;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 24px;
+  }
+
+  .step-label {
+    display: inline-block;
+    padding: 4px 12px;
+    background: #e0ddd6;
+    border-radius: 20px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: #999;
+    font-weight: 600;
+    margin-bottom: 24px;
+  }
+
+  .btn-row {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    margin-top: 8px;
+  }
+
+  .field-group {
+    margin-bottom: 20px;
+  }
+  .field-group:last-child { margin-bottom: 0; }
+
+  .example-pills {
+    display: flex;
+    gap: 6px;
+    margin-top: 8px;
+    flex-wrap: wrap;
+  }
+  .example-pill {
+    padding: 3px 10px;
+    background: #f5f3ef;
+    border: 1px solid #e0ddd6;
+    border-radius: 20px;
+    font-size: 11px;
+    font-family: 'IBM Plex Mono', monospace;
+    color: #666;
+    cursor: pointer;
+    transition: border-color 0.2s;
+  }
+  .example-pill:hover { border-color: #c45a3c; }
+
+  .send-guide {
+    background: #fff;
+    border: 1px solid #e0ddd6;
+    border-radius: 10px;
+    padding: 20px;
+    margin-bottom: 24px;
+    text-align: left;
+  }
+  .send-guide-title {
+    font-weight: 600;
+    font-size: 14px;
+    margin-bottom: 12px;
+  }
+  .send-guide-step {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    margin-bottom: 12px;
+    font-size: 13px;
+    color: #666;
+    line-height: 1.5;
+  }
+  .send-guide-step:last-child { margin-bottom: 0; }
+  .send-guide-num {
+    width: 24px; height: 24px;
+    min-width: 24px;
+    background: #f5f3ef;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 700;
+    color: #c45a3c;
+  }
+
+  .wizard-error {
+    background: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f5c6cb;
+    border-radius: 8px;
+    padding: 10px 16px;
+    font-size: 13px;
+    margin-bottom: 16px;
+    display: none;
+  }
+
+  .wizard-back {
+    color: #999;
+    font-size: 13px;
+    cursor: pointer;
+    border: none;
+    background: none;
+    font-family: 'Figtree', sans-serif;
+    margin-bottom: 16px;
+  }
+  .wizard-back:hover { color: #666; }
+
+  .timeout-hint {
+    color: #c45a3c;
+    font-size: 12px;
+    margin-top: 8px;
+    display: none;
+  }
+
+  /* Finish animation */
+  .finish-icon {
+    width: 80px; height: 80px;
+    margin: 0 auto 24px;
+    position: relative;
+  }
+  .finish-circle {
+    width: 80px; height: 80px;
+    border-radius: 50%;
+    border: 3px solid #1a1a1a;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    animation: scaleIn 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  }
+  @keyframes scaleIn {
+    0% { transform: scale(0); opacity: 0; }
+    100% { transform: scale(1); opacity: 1; }
+  }
+  .finish-check {
+    width: 32px; height: 32px;
+    animation: drawCheck 0.4s 0.4s ease-out both;
+  }
+  @keyframes drawCheck {
+    0% { opacity: 0; transform: scale(0.5) rotate(-10deg); }
+    100% { opacity: 1; transform: scale(1) rotate(0deg); }
+  }
+  .finish-rays {
+    position: absolute;
+    top: -12px; left: -12px;
+    right: -12px; bottom: -12px;
+  }
+  .finish-ray {
+    position: absolute;
+    width: 2px;
+    height: 10px;
+    background: #c45a3c;
+    border-radius: 2px;
+    animation: rayBurst 0.5s 0.6s ease-out both;
+    transform-origin: center;
+  }
+  @keyframes rayBurst {
+    0% { opacity: 0; transform: scaleY(0); }
+    50% { opacity: 1; transform: scaleY(1); }
+    100% { opacity: 0; transform: scaleY(0.5) translateY(-4px); }
+  }
+  .finish-ray:nth-child(1) { top: 0; left: 50%; transform: translateX(-50%); }
+  .finish-ray:nth-child(2) { top: 8px; right: 8px; transform: rotate(45deg); }
+  .finish-ray:nth-child(3) { right: 0; top: 50%; transform: translateY(-50%) rotate(90deg); }
+  .finish-ray:nth-child(4) { bottom: 8px; right: 8px; transform: rotate(135deg); }
+  .finish-ray:nth-child(5) { bottom: 0; left: 50%; transform: translateX(-50%) rotate(180deg); }
+  .finish-ray:nth-child(6) { bottom: 8px; left: 8px; transform: rotate(225deg); }
+  .finish-ray:nth-child(7) { left: 0; top: 50%; transform: translateY(-50%) rotate(270deg); }
+  .finish-ray:nth-child(8) { top: 8px; left: 8px; transform: rotate(315deg); }
+</style>
+</head>
+<body>
+
+<!-- ============ STEP 1: Welcome ============ -->
+<div id="step-welcome" class="wizard-page active" style="background: linear-gradient(180deg, #f5f3ef 0%, #ece9e3 100%);">
+  <div class="wizard-progress">
+    <div class="wizard-dot active"></div>
+    <div class="wizard-dot"></div>
+    <div class="wizard-dot"></div>
+    <div class="wizard-dot"></div>
+  </div>
+  <div class="wizard-content">
+    <div style="font-size: 64px; font-weight: 900; margin-bottom: 24px; letter-spacing: -2px;">P</div>
+    <div class="wizard-title">Welcome to Ponder</div>
+    <div class="wizard-subtitle">
+      Shared memory for your AI agents. Connect Claude Code, Codex, and other agents
+      to a central knowledge layer that persists across sessions.
+    </div>
+    <button class="wizard-btn" onclick="showStep('register')">Get Started &rarr;</button>
+  </div>
+</div>
+
+<!-- ============ STEP 2: Register Agent ============ -->
+<div id="step-register" class="wizard-page">
+  <div class="wizard-progress">
+    <div class="wizard-dot done"></div>
+    <div class="wizard-dot active"></div>
+    <div class="wizard-dot"></div>
+    <div class="wizard-dot"></div>
+  </div>
+  <div class="wizard-content">
+    <div class="step-label">Step 1 of 3</div>
+    <div class="wizard-title" style="font-size: 32px;">Register your first agent</div>
+    <div class="wizard-subtitle">
+      Every agent needs a unique ID so Ponder can track its state, knowledge, and conversations separately.
+    </div>
+    <div id="register-error" class="wizard-error"></div>
+    <div class="wizard-card">
+      <div class="field-group">
+        <div class="wizard-label">Agent ID</div>
+        <input id="agent-id-input" class="wizard-input" placeholder="e.g. claude-lin">
+        <div class="wizard-hint">A short, unique identifier. Use lowercase with hyphens. Convention: <strong>tool-machine</strong> (e.g. claude-lin = Claude on Linux).</div>
+        <div class="example-pills">
+          <span class="example-pill" onclick="document.getElementById('agent-id-input').value=this.textContent">claude-lin</span>
+          <span class="example-pill" onclick="document.getElementById('agent-id-input').value=this.textContent">codex-win</span>
+          <span class="example-pill" onclick="document.getElementById('agent-id-input').value=this.textContent">claude-mac</span>
+          <span class="example-pill" onclick="document.getElementById('agent-id-input').value=this.textContent">gemini-srv</span>
+        </div>
+      </div>
+      <div class="field-group">
+        <div class="wizard-label">Display Name</div>
+        <input id="agent-name-input" class="wizard-input-normal" placeholder="A friendly name shown in the dashboard">
+        <div class="wizard-hint">This appears in the dashboard, chat, and leaderboard. Can be anything you want.</div>
+      </div>
+    </div>
+    <button class="wizard-btn" onclick="registerAgent()">Continue &rarr;</button>
+  </div>
+</div>
+
+<!-- ============ STEP 3: Connect / Pairing ============ -->
+<div id="step-connect" class="wizard-page">
+  <div class="wizard-progress">
+    <div class="wizard-dot done"></div>
+    <div class="wizard-dot done"></div>
+    <div class="wizard-dot active"></div>
+    <div class="wizard-dot"></div>
+  </div>
+  <div class="wizard-content">
+    <div class="step-label">Step 2 of 3</div>
+    <button class="wizard-back" onclick="showStep('register')">&larr; Back</button>
+    <div class="wizard-title" style="font-size: 32px;">Connect your agent</div>
+    <div class="wizard-subtitle">
+      Send the onboarding instructions to your agent. It will read them and connect to Ponder automatically.
+    </div>
+
+    <div class="wizard-code" style="padding-right: 72px;">
+      <button class="copy-badge" onclick="copyInstructions()">Copy</button>
+      <div id="onboarding-code">Loading onboarding instructions...</div>
+    </div>
+
+    <div class="send-guide">
+      <div class="send-guide-title">How to connect</div>
+      <div class="send-guide-step">
+        <div class="send-guide-num">1</div>
+        <div>Copy the instructions above</div>
+      </div>
+      <div class="send-guide-step">
+        <div class="send-guide-num">2</div>
+        <div>Open a conversation with your agent (Claude Code, Codex, or any AI assistant)</div>
+      </div>
+      <div class="send-guide-step">
+        <div class="send-guide-num">3</div>
+        <div>Paste the instructions and tell the agent to follow them. It will connect to Ponder and set its status to active.</div>
+      </div>
+    </div>
+
+    <div class="waiting-indicator">
+      <div class="pulse-ring"></div>
+      Waiting for <strong id="waiting-agent-name" style="margin: 0 4px;">agent</strong> to check in...
+    </div>
+    <div id="timeout-hint" class="timeout-hint">
+      Taking longer than expected? Check that your agent can reach this server.
+    </div>
+  </div>
+</div>
+
+<!-- ============ STEP 3b: Agent Connected! ============ -->
+<div id="step-connected" class="wizard-page">
+  <div class="wizard-progress">
+    <div class="wizard-dot done"></div>
+    <div class="wizard-dot done"></div>
+    <div class="wizard-dot active"></div>
+    <div class="wizard-dot"></div>
+  </div>
+  <div class="wizard-content">
+    <div class="success-badge" id="connected-badge">&#10003; <span id="connected-agent-name">agent</span> connected</div>
+    <div class="wizard-title" style="font-size: 32px;">Agent connected!</div>
+    <div class="wizard-subtitle" id="connected-subtitle">
+      Your agent has checked in and is ready to use Ponder.
+    </div>
+    <div class="btn-row">
+      <button class="wizard-btn wizard-btn-secondary" onclick="showStep('register')">+ Add another agent</button>
+      <button class="wizard-btn" onclick="showStep('done')">Finish Setup &rarr;</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ STEP 4: Done ============ -->
+<div id="step-done" class="wizard-page" style="background: linear-gradient(180deg, #f5f3ef 0%, #ece9e3 100%);">
+  <div class="wizard-progress">
+    <div class="wizard-dot done"></div>
+    <div class="wizard-dot done"></div>
+    <div class="wizard-dot done"></div>
+    <div class="wizard-dot active"></div>
+  </div>
+  <div class="wizard-content">
+    <div class="finish-icon">
+      <div class="finish-rays">
+        <div class="finish-ray"></div>
+        <div class="finish-ray"></div>
+        <div class="finish-ray"></div>
+        <div class="finish-ray"></div>
+        <div class="finish-ray"></div>
+        <div class="finish-ray"></div>
+        <div class="finish-ray"></div>
+        <div class="finish-ray"></div>
+      </div>
+      <div class="finish-circle">
+        <svg class="finish-check" viewBox="0 0 24 24" fill="none" stroke="#1a1a1a" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="4 12 10 18 20 6"></polyline>
+        </svg>
+      </div>
+    </div>
+    <div class="wizard-title" style="font-size: 32px;">You're all set</div>
+    <div class="wizard-subtitle">
+      Ponder is ready. Your agents will share knowledge, state, and chat across sessions.
+    </div>
+    <button class="wizard-btn" onclick="window.location.href='/'">Open Dashboard &rarr;</button>
+  </div>
+</div>
+
+<script>
+var currentAgentId = '';
+var pollTimer = null;
+var timeoutTimer = null;
+var ponderUrl = '{{ ponder_url }}';
+
+function showStep(name) {
+  document.querySelectorAll('.wizard-page').forEach(function(p) {
+    p.classList.remove('active');
+  });
+  var target = document.getElementById('step-' + name);
+  if (target) target.classList.add('active');
+
+  /* Reset progress dots on the target step -- they are baked into each
+     step's HTML already, so we don't need dynamic logic here.  But when
+     navigating *back* to register we should clear errors. */
+  if (name === 'register') {
+    document.getElementById('register-error').style.display = 'none';
+  }
+}
+
+async function registerAgent() {
+  var agentId = document.getElementById('agent-id-input').value.trim();
+  var displayName = document.getElementById('agent-name-input').value.trim();
+  var errEl = document.getElementById('register-error');
+
+  if (!agentId) {
+    errEl.textContent = 'Please enter an Agent ID.';
+    errEl.style.display = 'block';
+    return;
+  }
+  if (!/^[a-z0-9-]+$/.test(agentId)) {
+    errEl.textContent = 'Agent ID must be lowercase letters, numbers, and hyphens only.';
+    errEl.style.display = 'block';
+    return;
+  }
+  errEl.style.display = 'none';
+
+  try {
+    var res = await fetch('/api/agents/' + encodeURIComponent(agentId), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ display_name: displayName || agentId })
+    });
+    if (!res.ok) {
+      var body = await res.json().catch(function() { return {}; });
+      throw new Error(body.error || 'Failed to register agent (HTTP ' + res.status + ')');
+    }
+
+    currentAgentId = agentId;
+    await fetchOnboarding(agentId);
+    document.getElementById('waiting-agent-name').textContent = agentId;
+    showStep('connect');
+    startPolling(agentId);
+  } catch (e) {
+    errEl.textContent = e.message;
+    errEl.style.display = 'block';
+  }
+}
+
+async function fetchOnboarding(agentId) {
+  try {
+    var res = await fetch('/api/onboarding/' + encodeURIComponent(agentId));
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    var data = await res.json();
+    var codeEl = document.getElementById('onboarding-code');
+    if (data && data.prompt) {
+      codeEl.textContent = data.prompt;
+    } else {
+      codeEl.textContent = '(No onboarding prompt available)';
+    }
+  } catch (e) {
+    document.getElementById('onboarding-code').textContent = 'Error loading onboarding: ' + e.message;
+  }
+}
+
+function startPolling(agentId) {
+  stopPolling();
+  var hint = document.getElementById('timeout-hint');
+  hint.style.display = 'none';
+
+  pollTimer = setInterval(async function() {
+    try {
+      var res = await fetch('/api/state/' + encodeURIComponent(agentId));
+      if (!res.ok) return;
+      var data = await res.json();
+      if (data && data.status) {
+        stopPolling();
+        document.getElementById('connected-agent-name').textContent = agentId;
+        document.getElementById('connected-subtitle').textContent =
+          agentId + ' has checked in and is ready to use Ponder.';
+        showStep('connected');
+      }
+    } catch (e) { /* ignore, retry next interval */ }
+  }, 3000);
+
+  timeoutTimer = setTimeout(function() {
+    hint.style.display = 'block';
+  }, 120000);
+}
+
+function stopPolling() {
+  if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+  if (timeoutTimer) { clearTimeout(timeoutTimer); timeoutTimer = null; }
+}
+
+function copyInstructions() {
+  var code = document.getElementById('onboarding-code').textContent;
+  var btn = document.querySelector('.copy-badge');
+  navigator.clipboard.writeText(code).then(function() {
+    btn.textContent = 'Copied!';
+    setTimeout(function() { btn.textContent = 'Copy'; }, 2000);
+  }).catch(function() {
+    /* Fallback for non-HTTPS contexts */
+    var ta = document.createElement('textarea');
+    ta.value = code;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    btn.textContent = 'Copied!';
+    setTimeout(function() { btn.textContent = 'Copy'; }, 2000);
+  });
+}
+</script>
+</body>
+</html>"""
+
 # ── Dashboard ────────────────────────────────────────────────
 
 DASHBOARD_HTML = """<!doctype html>
