@@ -668,7 +668,7 @@ DASHBOARD_HTML = """<!doctype html>
     <aside class="chat-sidebar">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
         <div class="section-title" style="margin:0;">Channels</div>
-        <span id="chat-sort-toggle" onclick="toggleChannelSort()" style="font-size:10px;color:#bbb;cursor:pointer;user-select:none;" title="Toggle sort">by activity</span>
+        <span id="chat-sort-toggle" onclick="toggleChannelSort()" style="font-size:10px;color:#999;cursor:pointer;user-select:none;border:1px solid #e0ddd6;padding:2px 8px;border-radius:4px;background:#fff;" title="Click to toggle sort">by activity</span>
       </div>
       <div id="chat-channel-tabs" class="chat-channel-tabs"></div>
       <div style="margin-top: 16px;">
