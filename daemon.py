@@ -738,7 +738,7 @@ DASHBOARD_HTML = """<!doctype html>
       {% for a in top_agents %}
       <div style="flex:1;min-width:200px;background:#fff;border:1px solid {{ '#d4a017' if loop.index == 1 else '#c0c0c0' if loop.index == 2 else '#b87333' }};border-radius:12px;padding:20px;position:relative;overflow:hidden;{{ 'border-width:2px;' if loop.index == 1 else '' }}">
         <div style="position:absolute;top:-8px;right:-8px;font-size:48px;opacity:0.08;font-weight:900;">{{ loop.index }}</div>
-        <div style="font-size:28px;margin-bottom:4px;">{{ '&#x1F451;' if loop.index == 1 else '&#x1F948;' if loop.index == 2 else '&#x1F949;' }}</div>
+        <div style="font-size:28px;margin-bottom:4px;">{% if loop.index == 1 %}👑{% elif loop.index == 2 %}🥈{% else %}🥉{% endif %}</div>
         <div style="font-family:'IBM Plex Mono',monospace;font-size:15px;font-weight:700;margin-bottom:2px;">{{ a.display_name }}</div>
         <div style="font-size:11px;color:#999;margin-bottom:10px;">{{ a.agent_id }}</div>
         <div style="font-size:24px;font-weight:800;color:{{ '#d4a017' if loop.index == 1 else '#8a8a8a' if loop.index == 2 else '#b87333' }};margin-bottom:8px;">{{ a.score }} <span style="font-size:12px;font-weight:500;color:#999;">pts</span></div>
