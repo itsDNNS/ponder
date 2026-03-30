@@ -883,81 +883,121 @@ DASHBOARD_HTML = """<!doctype html>
 </div>
 
 <div id="tab-system" class="tab-content">
-  {% for note in pinned_notes %}
-  <div class="pinned">
-    <h3>{{ note.subject }}</h3>
-    <button class="copy-btn" onclick="copyText(this, 'note-{{ note.id }}')" style="position: absolute; top: 12px; right: 12px;">Copy</button>
-    <pre id="note-{{ note.id }}">{{ note.object }}</pre>
-  </div>
-  {% endfor %}
-
-  <div class="section">
-    <div class="section-head"><div class="section-title">Sessions</div></div>
-    <table>
-      <tr><th>Session</th><th>Agent</th><th>Started</th><th>Status</th></tr>
-      {% for s in sessions %}
-      <tr>
-        <td>{{ s.id }}</td>
-        <td class="agent">{{ s.agent_id }}</td>
-        <td><span class="relative-time" data-ts="{{ s.started_at }}">{{ s.started_at }}</span></td>
-        <td class="{{ 'session-active' if not s.ended_at else 'session-ended' }}">{{ 'active' if not s.ended_at else 'ended' }}</td>
-      </tr>
-      {% endfor %}
-      {% if not sessions %}<tr><td colspan="4" class="muted">No sessions</td></tr>{% endif %}
-    </table>
+  <!-- Sub-tab navigation -->
+  <div style="display:flex; gap:24px; border-bottom:1px solid #e0ddd6; margin-bottom:20px; padding-bottom:0;">
+    <div class="sys-subtab active" data-subtab="health" onclick="showSystemSubTab('health', this)" style="cursor:pointer; padding:8px 0; font-size:13px; font-weight:700; color:#c45a3c; border-bottom:2px solid #c45a3c; margin-bottom:-2px;">Health</div>
+    <div class="sys-subtab" data-subtab="admin" onclick="showSystemSubTab('admin', this)" style="cursor:pointer; padding:8px 0; font-size:13px; font-weight:400; color:#999; border-bottom:none; margin-bottom:0;">Admin</div>
   </div>
 
-  <div class="section">
-    <div class="section-head"><div class="section-title">Working Memory</div></div>
-    {% for agent_id, wm_data in wm_by_agent.items() %}
-    <div class="panel">
-      <div style="font-family: 'IBM Plex Mono', monospace; font-weight: 600; margin-bottom: 8px;">{{ agent_id }} <span class="muted">({{ wm_data.session_id }})</span></div>
-      <table>
-        <tr><th>Key</th><th>Value</th></tr>
-        {% for k, v in wm_data.items.items() %}
-        <tr><td class="wm-key">{{ k }}</td><td>{{ v }}</td></tr>
-        {% endfor %}
-        {% if not wm_data.items %}<tr><td colspan="2" class="muted">(empty)</td></tr>{% endif %}
-      </table>
-    </div>
-    {% endfor %}
-    {% if not wm_by_agent %}<div class="muted">No active working memory.</div>{% endif %}
-  </div>
-
-  <div class="section">
-    <div class="section-head"><div class="section-title">Episodes</div></div>
-    <table>
-      <tr><th>#</th><th>Title</th><th>Agent</th><th>Category</th><th>Outcome</th><th>Tags</th><th>Started</th></tr>
-      {% for ep in all_episodes %}
-      <tr>
-        <td>{{ ep.id }}</td>
-        <td>{{ ep.title }}</td>
-        <td class="agent">{{ ep.agent_id }}</td>
-        <td>{{ ep.category }}</td>
-        <td>{{ ep.outcome or '...' }}</td>
-        <td>{% if ep.tags %}{% for tag in ep.tags_list %}<span class="tag">{{ tag }}</span>{% endfor %}{% endif %}</td>
-        <td><span class="relative-time" data-ts="{{ ep.started_at }}">{{ ep.started_at }}</span></td>
-      </tr>
-      {% endfor %}
-      {% if not all_episodes %}<tr><td colspan="7" class="muted">No episodes yet</td></tr>{% endif %}
-    </table>
-  </div>
-
-  <div class="section">
-    <div class="section-head"><div class="section-title">Onboarding</div></div>
-    <div class="panel">
-      <div class="form-grid">
-        <div>
-          <label for="onboarding-agent">Agent</label>
-          <input id="onboarding-agent" list="agent-ids" value="{{ default_onboarding_agent }}">
-        </div>
-        <div style="display:flex; align-items:end; gap:10px;">
-          <button onclick="loadOnboardingPrompt()">Load Onboarding</button>
-          <button onclick="copyText(this, 'onboarding-prompt')">Copy Prompt</button>
-        </div>
+  <!-- Health sub-tab -->
+  <div id="sys-health" class="sys-subtab-content" style="display:block;">
+    <div style="text-transform:uppercase; font-size:11px; color:#aaa; letter-spacing:1px; margin-bottom:12px; font-weight:600;">Health</div>
+    <div class="sys-health-grid" style="display:grid; grid-template-columns:repeat(4, 1fr); gap:12px; margin-bottom:24px;">
+      <div style="background:#fff; border:1px solid #e0ddd6; border-radius:10px; padding:16px;">
+        <div style="font-size:11px; color:#999; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:6px;">Uptime</div>
+        <div id="sys-uptime" style="font-size:22px; font-weight:700; font-family:'IBM Plex Mono',monospace;">-</div>
       </div>
-      <div id="onboarding-status" class="muted" style="font-size: 11px;">Canonical onboarding bundle for current and future agents.</div>
-      <pre id="onboarding-prompt" class="prompt-box">{{ onboarding_bundle.prompt if onboarding_bundle else '(select an agent)' }}</pre>
+      <div style="background:#fff; border:1px solid #e0ddd6; border-radius:10px; padding:16px;">
+        <div style="font-size:11px; color:#999; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:6px;">Database</div>
+        <div style="font-size:22px; font-weight:700; font-family:'IBM Plex Mono',monospace;">{{ "%.1f"|format(stats.db_size_bytes / 1048576) }} MB</div>
+      </div>
+      <div style="background:#fff; border:1px solid #e0ddd6; border-radius:10px; padding:16px;">
+        <div style="font-size:11px; color:#999; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:6px;">Records</div>
+        <div style="font-size:22px; font-weight:700; font-family:'IBM Plex Mono',monospace;">{{ "{:,}".format(stats.chat_total + stats.events_total + stats.knowledge_active) }}</div>
+        <div style="font-size:11px; color:#999; margin-top:4px;">{{ stats.chat_total }} chat / {{ stats.events_total }} events / {{ stats.knowledge_active }} knowledge</div>
+      </div>
+      <div style="background:#fff; border:1px solid #e0ddd6; border-radius:10px; padding:16px;">
+        <div style="font-size:11px; color:#999; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:6px;">Active Sessions</div>
+        <div style="font-size:22px; font-weight:700; font-family:'IBM Plex Mono',monospace; color:#2ecc71;">{{ sessions|selectattr('ended_at', 'none')|list|length }}</div>
+        <div style="font-size:11px; color:#999; margin-top:4px;">of {{ agent_profiles|length }} agents</div>
+      </div>
+    </div>
+
+    <div style="text-transform:uppercase; font-size:11px; color:#aaa; letter-spacing:1px; margin-bottom:12px; font-weight:600;">Working Memory</div>
+    <div class="sys-wm-grid" style="display:grid; grid-template-columns:repeat(2, 1fr); gap:12px; margin-bottom:24px;">
+      {% for agent_id, wm_data in wm_by_agent.items() %}
+      <div style="background:#fff; border:1px solid #e0ddd6; border-radius:10px; padding:16px;">
+        <div style="font-family:'IBM Plex Mono',monospace; font-weight:600; margin-bottom:8px;">{{ agent_id }} <span style="color:#999; font-weight:400;">({{ wm_data.session_id }})</span></div>
+        {% for k, v in wm_data.items.items() %}
+        <div style="margin-bottom:4px;"><span style="color:#c45a3c; font-family:'IBM Plex Mono',monospace; font-size:12px;">{{ k }}</span> <span style="font-family:'IBM Plex Mono',monospace; font-size:12px;">{{ v }}</span></div>
+        {% endfor %}
+        {% if not wm_data.items %}<div style="color:#999; font-size:12px;">(empty)</div>{% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    {% if not wm_by_agent %}<div class="muted" style="margin-bottom:24px;">No active sessions</div>{% endif %}
+
+    <div style="text-transform:uppercase; font-size:11px; color:#aaa; letter-spacing:1px; margin-bottom:12px; font-weight:600;">Onboarding</div>
+    <div style="background:#fff; border:1px solid #e0ddd6; border-radius:10px; padding:16px; margin-bottom:24px;">
+      <div style="display:flex; gap:10px; align-items:end; margin-bottom:12px;">
+        <div>
+          <label for="onboarding-agent" style="font-size:11px; color:#999; text-transform:uppercase; letter-spacing:0.5px; display:block; margin-bottom:4px;">Agent</label>
+          <select id="onboarding-agent" style="padding:6px 10px; border:1px solid #e0ddd6; border-radius:6px; font-family:'Figtree',sans-serif; font-size:13px;">
+            {% for profile in agent_profiles %}
+            <option value="{{ profile.agent_id }}">{{ profile.display_name or profile.agent_id }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button onclick="loadOnboardingPrompt()" style="padding:8px 20px; background:#1a1a1a; color:#fff; border:none; border-radius:6px; font-size:12px; cursor:pointer; font-family:'Figtree',sans-serif;">Load</button>
+        <button onclick="copyText(this, 'onboarding-prompt')" style="padding:8px 20px; background:#1a1a1a; color:#fff; border:none; border-radius:6px; font-size:12px; cursor:pointer; font-family:'Figtree',sans-serif;">Copy</button>
+      </div>
+      <pre id="onboarding-prompt" style="background:#faf9f6; border:1px solid #e0ddd6; border-radius:8px; padding:12px; font-family:'IBM Plex Mono',monospace; font-size:12px; white-space:pre-wrap; word-break:break-word; max-height:300px; overflow-y:auto;">{{ onboarding_bundle.prompt if onboarding_bundle else '(select an agent)' }}</pre>
+    </div>
+  </div>
+
+  <!-- Admin sub-tab -->
+  <div id="sys-admin" class="sys-subtab-content" style="display:none;">
+    <div style="text-transform:uppercase; font-size:11px; color:#aaa; letter-spacing:1px; margin-bottom:12px; font-weight:600;">Maintenance Actions</div>
+    <div class="sys-maint-grid" style="display:grid; grid-template-columns:repeat(3, 1fr); gap:12px; margin-bottom:24px;">
+      <div style="background:#fff; border:1px solid #e0ddd6; border-radius:10px; padding:16px;">
+        <div style="font-weight:600; margin-bottom:6px;">Cleanup Tasks</div>
+        <div style="font-size:12px; color:#999; margin-bottom:12px;">Remove completed and failed tasks older than 7 days.</div>
+        <button onclick="runMaintenance(this, 'tasks')" style="padding:8px 20px; background:#1a1a1a; color:#fff; border:none; border-radius:6px; font-size:12px; cursor:pointer; font-family:'Figtree',sans-serif;">Run</button>
+      </div>
+      <div style="background:#fff; border:1px solid #e0ddd6; border-radius:10px; padding:16px;">
+        <div style="font-weight:600; margin-bottom:6px;">Knowledge Decay</div>
+        <div style="font-size:12px; color:#999; margin-bottom:12px;">Decay confidence of stale knowledge entries.</div>
+        <button onclick="runMaintenance(this, 'knowledge')" style="padding:8px 20px; background:#1a1a1a; color:#fff; border:none; border-radius:6px; font-size:12px; cursor:pointer; font-family:'Figtree',sans-serif;">Run</button>
+      </div>
+      <div style="background:#fff; border:1px solid #e0ddd6; border-radius:10px; padding:16px;">
+        <div style="font-weight:600; margin-bottom:6px;">Purge Observations</div>
+        <div style="font-size:12px; color:#999; margin-bottom:12px;">Delete observation records older than 48 hours.</div>
+        <button onclick="runMaintenance(this, 'observations')" style="padding:8px 20px; background:#1a1a1a; color:#fff; border:none; border-radius:6px; font-size:12px; cursor:pointer; font-family:'Figtree',sans-serif;">Run</button>
+      </div>
+    </div>
+
+    <div style="text-transform:uppercase; font-size:11px; color:#aaa; letter-spacing:1px; margin-bottom:12px; font-weight:600;">Maintenance Log</div>
+    <div id="maintenance-log" style="background:#fff; border:1px solid #e0ddd6; border-radius:10px; padding:16px; margin-bottom:24px; font-family:'IBM Plex Mono',monospace; font-size:12px; min-height:60px;">
+      <div class="muted" style="text-align:center;">No maintenance runs yet</div>
+    </div>
+
+    <div style="text-transform:uppercase; font-size:11px; color:#aaa; letter-spacing:1px; margin-bottom:12px; font-weight:600;">Episodes</div>
+    <div style="background:#fff; border:1px solid #e0ddd6; border-radius:10px; overflow:hidden;">
+      <table style="width:100%; border-collapse:collapse;">
+        <tr>
+          <th style="background:#faf9f6; border-bottom:1px solid #e0ddd6; padding:10px 14px; font-size:11px; text-transform:uppercase; color:#999; text-align:left;">#</th>
+          <th style="background:#faf9f6; border-bottom:1px solid #e0ddd6; padding:10px 14px; font-size:11px; text-transform:uppercase; color:#999; text-align:left;">Title</th>
+          <th style="background:#faf9f6; border-bottom:1px solid #e0ddd6; padding:10px 14px; font-size:11px; text-transform:uppercase; color:#999; text-align:left;">Agent</th>
+          <th style="background:#faf9f6; border-bottom:1px solid #e0ddd6; padding:10px 14px; font-size:11px; text-transform:uppercase; color:#999; text-align:left;">Category</th>
+          <th style="background:#faf9f6; border-bottom:1px solid #e0ddd6; padding:10px 14px; font-size:11px; text-transform:uppercase; color:#999; text-align:left;">Outcome</th>
+          <th style="background:#faf9f6; border-bottom:1px solid #e0ddd6; padding:10px 14px; font-size:11px; text-transform:uppercase; color:#999; text-align:left;">Tags</th>
+        </tr>
+        {% for ep in all_episodes %}
+        <tr style="border-bottom:1px solid #f0ede8;">
+          <td style="padding:10px 14px; font-size:13px;">{{ ep.id }}</td>
+          <td style="padding:10px 14px; font-size:13px;">{{ ep.title }}</td>
+          <td style="padding:10px 14px; font-size:13px; font-family:'IBM Plex Mono',monospace;">{{ ep.agent_id }}</td>
+          <td style="padding:10px 14px; font-size:13px;"><span style="padding:2px 8px; border-radius:10px; font-size:11px; background:#f0ede8; color:#666;">{{ ep.category }}</span></td>
+          <td style="padding:10px 14px; font-size:13px;">
+            {% if ep.outcome == 'success' %}<span style="padding:2px 8px; border-radius:10px; font-size:11px; background:#e8f5e9; color:#2e7d32;">{{ ep.outcome }}</span>
+            {% elif ep.outcome == 'failure' %}<span style="padding:2px 8px; border-radius:10px; font-size:11px; background:#fbe9e7; color:#c62828;">{{ ep.outcome }}</span>
+            {% else %}<span style="padding:2px 8px; border-radius:10px; font-size:11px; background:#f0ede8; color:#666;">{{ ep.outcome or '...' }}</span>{% endif %}
+          </td>
+          <td style="padding:10px 14px; font-size:13px;">{% if ep.tags %}{% for tag in ep.tags_list %}<span class="tag">{{ tag }}</span>{% endfor %}{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </table>
+      {% if not all_episodes %}<div class="muted" style="padding:20px; text-align:center;">No episodes yet</div>{% endif %}
     </div>
   </div>
 </div>
@@ -973,7 +1013,7 @@ const INITIAL_CHAT_MESSAGES = {{ chat_messages|tojson }};
 const INITIAL_CHAT_CHANNELS = {{ chat_channels|tojson }};
 const CHAT_POLL_INTERVAL_MS = 3000;
 const TAB_NAMES = ['overview', 'chat', 'agents', 'knowledge', 'system'];
-const TAB_REDIRECTS = { 'working': 'system', 'episodes': 'system', 'onboarding': 'system' };
+const TAB_REDIRECTS = { 'working': 'system', 'episodes': 'system', 'onboarding': 'system', 'admin': 'system' };
 const chatState = {
   activeChannel: '{{ default_chat_channel|replace("'", "\\'") }}',
   channelSummaries: INITIAL_CHAT_CHANNELS,
@@ -1031,6 +1071,26 @@ function showTab(name, el, options) {
   }
 }
 
+function showSystemSubTab(name, el) {
+  document.querySelectorAll('.sys-subtab-content').forEach(n => n.style.display = 'none');
+  document.querySelectorAll('.sys-subtab').forEach(n => {
+    n.classList.remove('active');
+    n.style.color = '#999';
+    n.style.fontWeight = '400';
+    n.style.borderBottom = 'none';
+    n.style.marginBottom = '0';
+  });
+  document.getElementById('sys-' + name).style.display = 'block';
+  if (el) {
+    el.classList.add('active');
+    el.style.color = '#c45a3c';
+    el.style.fontWeight = '700';
+    el.style.borderBottom = '2px solid #c45a3c';
+    el.style.marginBottom = '-2px';
+  }
+  window.location.hash = name === 'health' ? 'system' : 'system/' + name;
+}
+
 async function postJson(url, payload) {
   const res = await fetch(url, {
     method: 'POST',
@@ -1042,6 +1102,67 @@ async function postJson(url, payload) {
     throw new Error(data.error || ('HTTP ' + res.status));
   }
   return data;
+}
+
+async function runMaintenance(btn, only) {
+  if (btn.dataset.confirm !== 'yes') {
+    btn.textContent = 'Confirm?';
+    btn.style.background = '#c45a3c';
+    btn.dataset.confirm = 'yes';
+    setTimeout(function() { btn.textContent = 'Run'; btn.style.background = '#1a1a1a'; delete btn.dataset.confirm; }, 3000);
+    return;
+  }
+  btn.textContent = '...';
+  btn.disabled = true;
+  delete btn.dataset.confirm;
+  try {
+    var res = await postJson('/api/maintenance', { only: only });
+    var log = document.getElementById('maintenance-log');
+    var ts = new Date().toLocaleTimeString();
+    var counts = Object.entries(res).filter(function(e) { return e[0] !== 'ok'; }).map(function(e) { return e[0] + ': ' + e[1]; }).join(', ');
+    var line = document.createElement('div');
+    var tsSpan = document.createElement('span');
+    tsSpan.style.color = '#999';
+    tsSpan.textContent = ts;
+    line.appendChild(tsSpan);
+    line.appendChild(document.createTextNode(' ' + only + ': ' + counts));
+    if (log.querySelector('.muted')) log.textContent = '';
+    log.appendChild(line);
+  } catch (e) {
+    var log = document.getElementById('maintenance-log');
+    var ts = new Date().toLocaleTimeString();
+    var line = document.createElement('div');
+    var tsSpan = document.createElement('span');
+    tsSpan.style.color = '#999';
+    tsSpan.textContent = ts;
+    var errSpan = document.createElement('span');
+    errSpan.style.color = '#b33a3a';
+    errSpan.textContent = 'ERROR: ' + e.message;
+    line.appendChild(tsSpan);
+    line.appendChild(document.createTextNode(' '));
+    line.appendChild(errSpan);
+    if (log.querySelector('.muted')) log.textContent = '';
+    log.appendChild(line);
+  }
+  btn.textContent = 'Run';
+  btn.style.background = '#1a1a1a';
+  btn.disabled = false;
+}
+
+async function loadUptime() {
+  try {
+    var r = await fetch('/api/status');
+    var d = await r.json();
+    var s = Math.floor(d.uptime_seconds || 0);
+    var days = Math.floor(s / 86400);
+    var hours = Math.floor((s % 86400) / 3600);
+    var mins = Math.floor((s % 3600) / 60);
+    var text = '';
+    if (days > 0) text += days + 'd ';
+    if (hours > 0 || days > 0) text += hours + 'h';
+    else text += mins + 'm';
+    document.getElementById('sys-uptime').textContent = text.trim();
+  } catch(e) { document.getElementById('sys-uptime').textContent = '-'; }
 }
 
 function copyText(btn, id) {
@@ -1521,25 +1642,31 @@ function jumpToChatChannel() {
 }
 
 function syncTabFromHash() {
-  const hashState = getHashState();
+  var hashState = getHashState();
   if (hashState.tab === 'chat' && hashState.chatChannel) {
     setActiveChatChannel(hashState.chatChannel, { refresh: false, syncHash: false });
   }
   showTab(hashState.tab, findTabButton(hashState.tab), { setHash: false });
+  if (hashState.tab === 'system') {
+    var hash = window.location.hash.replace(/^#/, '');
+    var subTab = hash.indexOf('/') !== -1 ? hash.split('/')[1] : 'health';
+    var btn = document.querySelector('.sys-subtab[data-subtab="' + subTab + '"]');
+    showSystemSubTab(subTab, btn);
+    loadUptime();
+  }
 }
 
 async function loadOnboardingPrompt() {
-  const agent = document.getElementById('onboarding-agent').value.trim() || 'agent';
-  const status = document.getElementById('onboarding-status');
-  status.textContent = 'Loading...';
+  var agent = document.getElementById('onboarding-agent').value.trim() || 'agent';
+  var prompt = document.getElementById('onboarding-prompt');
+  prompt.textContent = 'Loading...';
   try {
-    const res = await fetch('/api/onboarding/' + encodeURIComponent(agent));
-    const data = await res.json();
+    var res = await fetch('/api/onboarding/' + encodeURIComponent(agent));
+    var data = await res.json();
     if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
-    document.getElementById('onboarding-prompt').textContent = data.prompt;
-    status.textContent = 'Loaded canonical onboarding for ' + data.profile.agent_id + '.';
+    prompt.textContent = data.prompt;
   } catch (err) {
-    status.textContent = err.message;
+    prompt.textContent = 'Error: ' + err.message;
   }
 }
 
