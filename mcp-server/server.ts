@@ -20,9 +20,17 @@ import {
   CallToolRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js'
 
+import { appendFileSync } from 'node:fs'
+
 const PONDER_URL = process.env.PONDER_URL || 'http://localhost:9077'
 const AGENT_ID = process.env.PONDER_AGENT_ID || 'claude'
 const POLL_MS = parseInt(process.env.PONDER_POLL_MS || '3000', 10)
+const DEBUG_LOG = `${process.env.HOME}/.claude/channels/ponder/debug.log`
+
+function debugLog(msg: string) {
+  const ts = new Date().toISOString()
+  try { appendFileSync(DEBUG_LOG, `${ts} ${msg}\n`) } catch {}
+}
 
 process.on('unhandledRejection', err => {
   process.stderr.write(`ponder mcp: unhandled rejection: ${err}\n`)
@@ -65,7 +73,7 @@ async function api(method: string, path: string, body?: unknown): Promise<unknow
 // ── MCP Server ───────────────────────────────────────────
 
 const mcp = new Server(
-  { name: 'ponder', version: '0.2.0' },
+  { name: 'ponder', version: '0.3.0' },
   {
     capabilities: {
       tools: {},
@@ -73,6 +81,11 @@ const mcp = new Server(
         'claude/channel': {},
       },
     },
+    instructions: [
+      'Messages from Ponder arrive as <channel source="ponder" chat_id="..." message_id="..." user="..." ts="...">.',
+      'chat_id is the Ponder channel name (e.g. "general"). Reply with the reply tool, passing the channel name back.',
+      'user is the sender\'s agent ID (e.g. "Human", "claude-win"). Respond to messages directed at you or mentioning you.',
+    ].join('\n'),
   },
 )
 
@@ -321,36 +334,43 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
 async function pollChat(): Promise<void> {
   try {
     const sinceParam = lastSeenMessageId > 0 ? `&since=${lastSeenMessageId}` : ''
-    const messages = await api('GET', `/api/chat?agent_id=${encodeURIComponent(AGENT_ID)}&limit=100${sinceParam}`) as ChatMessage[]
+    const url = `/api/chat?agent_id=${encodeURIComponent(AGENT_ID)}&limit=100${sinceParam}`
+    debugLog(`POLL cursor=${lastSeenMessageId} url=${url}`)
+    const messages = await api('GET', url) as ChatMessage[]
+    debugLog(`POLL got ${messages.length} messages`)
 
     for (const m of messages) {
+      lastSeenMessageId = Math.max(lastSeenMessageId, m.id)
+
       if (m.sender_agent.toLowerCase() === agentIdLower) {
-        lastSeenMessageId = Math.max(lastSeenMessageId, m.id)
+        debugLog(`SKIP own message #${m.id}`)
         continue
       }
 
-      try {
-        await mcp.notification({
-          method: 'notifications/claude/channel',
-          params: {
-            content: m.body,
-            meta: {
-              chat_id: m.channel,
-              message_id: String(m.id),
-              user: m.sender_agent,
-              ts: m.created_at,
-              ...(m.target_agent ? { target_agent: m.target_agent } : {}),
-            },
+      const payload = {
+        method: 'notifications/claude/channel' as const,
+        params: {
+          content: m.body,
+          meta: {
+            chat_id: m.channel,
+            message_id: String(m.id),
+            user: m.sender_agent,
+            ts: m.created_at,
+            ...(m.target_agent ? { target_agent: m.target_agent } : {}),
           },
-        })
-        lastSeenMessageId = Math.max(lastSeenMessageId, m.id)
-        process.stderr.write(`ponder: forwarded #${m.id} from ${m.sender_agent} in #${m.channel}\n`)
-      } catch (err) {
-        process.stderr.write(`ponder: notification delivery failed for #${m.id}: ${err}\n`)
-        break
+        },
       }
+      debugLog(`NOTIFY #${m.id} payload=${JSON.stringify(payload)}`)
+      mcp.notification(payload).then(() => {
+        debugLog(`NOTIFY #${m.id} SUCCESS`)
+      }).catch(err => {
+        debugLog(`NOTIFY #${m.id} FAILED: ${err}`)
+        process.stderr.write(`ponder: notification delivery failed for #${m.id}: ${err}\n`)
+      })
+      process.stderr.write(`ponder: forwarded #${m.id} from ${m.sender_agent} in #${m.channel}\n`)
     }
   } catch (err) {
+    debugLog(`POLL ERROR: ${err}`)
     process.stderr.write(`ponder: poll error: ${err}\n`)
   }
 }
@@ -382,8 +402,10 @@ async function main() {
   const transport = new StdioServerTransport()
   await mcp.connect(transport)
   process.stderr.write(`ponder mcp: connected as ${AGENT_ID} to ${PONDER_URL}\n`)
+  debugLog(`STARTUP connected as ${AGENT_ID} to ${PONDER_URL}, cursor=#${lastSeenMessageId}, poll=${POLL_MS}ms`)
 
   // Start polling loop after connection is established
+  process.stderr.write(`ponder mcp: polling every ${POLL_MS}ms, cursor seeded at #${lastSeenMessageId}\n`)
   void (async () => {
     while (true) {
       await new Promise(r => setTimeout(r, POLL_MS))

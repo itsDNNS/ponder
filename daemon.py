@@ -1720,7 +1720,8 @@ def _parse_event_data(events):
         e["data_parsed"] = {}
         if e.get("data"):
             try:
-                e["data_parsed"] = json.loads(e["data"]) if isinstance(e["data"], str) else e["data"]
+                parsed = json.loads(e["data"]) if isinstance(e["data"], str) else e["data"]
+                e["data_parsed"] = parsed if isinstance(parsed, dict) else {}
             except (json.JSONDecodeError, TypeError):
                 pass
     return events
