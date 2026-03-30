@@ -794,7 +794,7 @@ DASHBOARD_HTML = """<!doctype html>
       <div class="agent-card-meta">
         <span class="muted">deactivated</span>
         {% if profile.state and profile.state.updated_at %}<span class="relative-time" data-ts="{{ profile.state.updated_at }}">{{ profile.state.updated_at }}</span>{% endif %}
-        <span onclick="deleteAgent('{{ profile.agent_id }}')" style="margin-left:auto;cursor:pointer;color:#c45a3c;font-size:11px;opacity:2;" title="Remove agent (keeps knowledge and chat)">remove</span>
+        <span onclick="deleteAgent('{{ profile.agent_id }}')" style="margin-left:auto;cursor:pointer;color:#c45a3c;opacity:0.5;display:flex;" title="Remove agent (keeps knowledge and chat)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-12"/><path d="M9 7V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v3"/></svg></span>
       </div>
     </div>
     {% endfor %}
