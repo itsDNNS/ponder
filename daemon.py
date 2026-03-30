@@ -77,119 +77,511 @@ mem = AgentMemory()
 
 DASHBOARD_HTML = """<!doctype html>
 <html><head>
-<title>Agent Memory</title>
+<title>Ponder</title>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
-  body { font-family: monospace; background: #1a1a2e; color: #e0e0e0; margin: 2em; }
-  h1 { color: #e94560; margin-bottom: 0.4em; }
-  h2 { color: #e0e0e0; border-bottom: 1px solid #333; padding-bottom: 4px; margin-top: 1.4em; }
-  h3 { color: #22d3ee; margin: 1em 0 0.5em 0; }
-  table { border-collapse: collapse; width: 100%; margin-bottom: 2em; }
-  th, td { text-align: left; padding: 6px 12px; border-bottom: 1px solid #333; vertical-align: top; }
-  th { color: #e94560; }
-  input, textarea, button, select { font: inherit; }
-  input, textarea, select { width: 100%; background: #16213e; color: #e0e0e0; border: 1px solid #333; border-radius: 6px; padding: 8px 10px; }
-  textarea { min-height: 100px; resize: vertical; }
-  button { background: #e94560; color: #fff; border: none; border-radius: 6px; padding: 8px 14px; cursor: pointer; }
-  button:hover { background: #c73650; }
-  .status-idle { color: #888; }
-  .status-active, .status-working { color: #4ade80; }
-  .status-waiting { color: #facc15; }
-  .pending { color: #facc15; }
-  .claimed { color: #60a5fa; }
-  .done, .success { color: #4ade80; }
-  .failed, .failure { color: #f87171; }
-  .event-type { color: #c084fc; }
-  .agent { color: #22d3ee; }
-  .stats { display: flex; gap: 1em; margin-bottom: 2em; flex-wrap: wrap; }
-  .stat { background: #16213e; padding: 12px 20px; border-radius: 8px; min-width: 140px; }
-  .stat-value { font-size: 1.5em; color: #e94560; }
-  .stat-label { font-size: 0.85em; color: #888; }
-  .tabs { display: flex; gap: 0; margin: 2em 0 1.5em 0; border-bottom: 2px solid #333; flex-wrap: wrap; }
-  .tab { padding: 10px 16px; cursor: pointer; color: #888; border-bottom: 2px solid transparent; margin-bottom: -2px; }
-  .tab:hover { color: #e0e0e0; }
-  .tab.active { color: #e94560; border-bottom-color: #e94560; }
+  @import url('https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800;900&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Figtree', sans-serif;
+    background: #f5f3ef;
+    color: #1a1a1a;
+    min-height: 100vh;
+  }
+
+  .page { max-width: 1100px; margin: 0 auto; padding: 16px 32px; }
+
+  /* === HERO === */
+  .hero {
+    position: relative;
+    margin-bottom: 0;
+    padding: 16px 0 0;
+  }
+  .hero-mark {
+    position: absolute;
+    top: 16px; right: 0;
+    pointer-events: none;
+    user-select: none;
+    z-index: 0;
+    color: rgba(0,0,0,0.06);
+  }
+  .hero-mark svg { width: 140px; height: 158px; }
+  .hero-content { position: relative; z-index: 1; }
+  .hero-label { display: none; }
+  .hero-title {
+    font-size: 52px;
+    font-weight: 900;
+    letter-spacing: -2px;
+    line-height: 1.05;
+    margin-bottom: 20px;
+  }
+  .hero-title .count {
+    display: inline-block;
+    position: relative;
+  }
+  .hero-title .count::after {
+    content: '';
+    position: absolute;
+    bottom: 6px; left: 0; right: 0;
+    height: 12px;
+    background: #c45a3c;
+    opacity: 0.15;
+    border-radius: 2px;
+    z-index: -1;
+  }
+
+  .hero-agents {
+    display: flex;
+    gap: 24px;
+    margin: 24px 0 12px;
+    flex-wrap: wrap;
+  }
+  .hero-agent {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .hero-agent-ring {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: 2px solid #1a1a1a;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    font-weight: 600;
+    position: relative;
+  }
+  .hero-agent-ring.active::after {
+    content: '';
+    position: absolute;
+    bottom: -1px; right: -1px;
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    background: #2ecc71;
+    border: 2px solid #f5f3ef;
+  }
+  .hero-agent-ring.idle { border-color: #d0ccc4; color: #bbb; }
+  .hero-agent-info { font-size: 13px; }
+  .hero-agent-name {
+    font-family: 'IBM Plex Mono', monospace;
+    font-weight: 600;
+    font-size: 12px;
+  }
+  .hero-agent-name.idle { color: #bbb; }
+  .hero-agent-task { color: #888; font-size: 12px; }
+
+  /* === TABS === */
+  .tabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 36px;
+    background: #eae7e0;
+    padding: 4px;
+    border-radius: 8px;
+    width: fit-content;
+  }
+  .tab {
+    font-size: 13px;
+    font-weight: 500;
+    padding: 8px 18px;
+    color: #888;
+    cursor: pointer;
+    border-radius: 6px;
+    transition: all 0.15s;
+  }
+  .tab:hover { color: #1a1a1a; }
+  .tab.active {
+    color: #1a1a1a;
+    background: #fff;
+    font-weight: 600;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  }
+
+  /* === TAB CONTENT === */
   .tab-content { display: none; }
   .tab-content.active { display: block; }
-  .confidence { display: inline-block; background: #333; border-radius: 4px; width: 60px; height: 8px; overflow: hidden; vertical-align: middle; }
-  .confidence-fill { height: 100%; background: #4ade80; }
-  .tag { display: inline-block; background: #0f3460; color: #60a5fa; padding: 2px 6px; border-radius: 3px; font-size: 0.85em; margin: 1px; }
-  .session-active { color: #4ade80; }
-  .session-ended { color: #888; }
-  .wm-key { color: #c084fc; }
-  .pinned { border: 1px solid #e94560; border-radius: 8px; padding: 16px 20px; margin-bottom: 1em; background: #16213e; position: relative; }
-  .pinned h3 { color: #e94560; margin: 0 0 8px 0; font-size: 1.05em; }
-  .copy-btn { position: absolute; top: 12px; right: 12px; background: #e94560; color: #fff; border: none; padding: 6px 14px; border-radius: 4px; cursor: pointer; font-family: monospace; font-size: 0.85em; }
-  .copy-btn.copied { background: #4ade80; color: #1a1a2e; }
-  .panel { background: #16213e; border-radius: 8px; padding: 16px 18px; margin-bottom: 1em; }
-  .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; margin-bottom: 10px; }
-  .muted { color: #888; }
-  .prompt-box, pre { background: #0f172a; padding: 10px 12px; border-radius: 6px; overflow-x: auto; white-space: pre-wrap; word-break: break-word; }
-  .chat-body { min-width: 360px; }
-  .chat-target { color: #facc15; }
-  .api-status { margin-top: 0.6em; color: #888; }
+
+  /* === SECTIONS === */
+  .section { margin-bottom: 40px; }
+  .section-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 14px;
+  }
+  .section-title {
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: #aaa;
+  }
+  .section-link {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    color: #c45a3c;
+    text-decoration: none;
+    cursor: pointer;
+  }
+  .section-link:hover { text-decoration: underline; }
+
+  /* === HEADINGS === */
+  h2 { color: #1a1a1a; border-bottom: 1px solid #e0ddd6; padding-bottom: 4px; margin-top: 1.4em; font-size: 16px; }
+  h3 { color: #c45a3c; margin: 1em 0 0.5em 0; font-size: 14px; }
+
+  /* === TASKS === */
+  .task {
+    background: #fff;
+    border: 1px solid #e0ddd6;
+    border-radius: 10px;
+    padding: 16px 20px;
+    margin-bottom: 8px;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 12px;
+    align-items: center;
+    transition: border-color 0.12s, box-shadow 0.12s;
+    cursor: pointer;
+  }
+  .task:hover {
+    border-color: #c4c0b8;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+  }
+  .task.done { opacity: 0.45; }
+  .task-row { display: flex; align-items: center; gap: 10px; }
+  .task-num {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    color: #ccc;
+  }
+  .task-title { font-size: 14px; font-weight: 600; }
+  .task-sub {
+    font-size: 12px;
+    color: #999;
+    margin-top: 3px;
+    padding-left: 36px;
+  }
+  .task-sub strong { color: #c45a3c; font-weight: 500; }
+
+  /* === PILLS === */
+  .pill {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    padding: 4px 10px;
+    border-radius: 5px;
+    font-weight: 500;
+  }
+  .pill-active, .pill-in_progress { background: #e6f5ec; color: #1a6b3a; }
+  .pill-pending { background: #fef4e0; color: #8a6d2b; }
+  .pill-done, .pill-completed { background: #eae7e0; color: #aaa; }
+  .pill-success { background: #e6f5ec; color: #1a6b3a; }
+  .pill-failed, .pill-failure { background: #fde8e8; color: #b33a3a; }
+
+  /* === TIMELINE === */
+  .tl-item {
+    display: grid;
+    grid-template-columns: 40px 80px 1fr;
+    gap: 8px;
+    padding: 10px 0;
+    font-size: 13px;
+    border-bottom: 1px solid #eae7e0;
+    align-items: baseline;
+  }
+  .tl-item:last-child { border-bottom: none; }
+  .tl-time {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    color: #ccc;
+  }
+  .tl-who {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .tl-text { color: #777; }
+  .tl-text strong { color: #1a1a1a; font-weight: 500; }
+
+  /* === CHAT FULL VIEW === */
   .chat-shell { display: grid; grid-template-columns: minmax(220px, 280px) minmax(0, 1fr); gap: 16px; align-items: start; }
   .chat-sidebar { position: sticky; top: 1em; }
   .chat-main { min-width: 0; }
   .chat-sidebar h2, .chat-main h2 { margin-top: 0; }
   .chat-channel-tabs { display: flex; flex-direction: column; gap: 8px; margin: 12px 0 16px 0; }
-  .chat-channel-tab { display: flex; justify-content: space-between; align-items: center; gap: 12px; width: 100%; padding: 10px 12px; border: 1px solid #23314f; border-radius: 8px; background: #0f172a; color: #dbe4ff; cursor: pointer; text-align: left; }
-  .chat-channel-tab:hover { border-color: #37507e; background: #13203a; }
-  .chat-channel-tab.active { border-color: #e94560; background: #1b223f; }
+  .chat-channel-tab {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid #e0ddd6;
+    border-radius: 8px;
+    background: #fff;
+    color: #1a1a1a;
+    cursor: pointer;
+    text-align: left;
+  }
+  .chat-channel-tab:hover { border-color: #c4c0b8; background: #faf8f5; }
+  .chat-channel-tab.active { border-color: #c45a3c; background: #fdf9f7; }
   .chat-channel-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .chat-channel-count { font-size: 0.82em; color: #8aa3d1; }
+  .chat-channel-count { font-size: 0.82em; color: #999; }
+  .chat-feed {
+    background: #fff;
+    border: 1px solid #e0ddd6;
+    border-radius: 8px;
+    max-height: 58vh;
+    overflow-y: auto;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .chat-toolbar {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 10px;
+    margin-bottom: 12px;
+  }
   .chat-header-row { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
-  .chat-toolbar { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin-bottom: 12px; }
-  .chat-feed { background: #0f172a; border: 1px solid #23314f; border-radius: 8px; max-height: 58vh; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
-  .chat-message { border: 1px solid #23314f; border-radius: 8px; padding: 10px 12px; background: #111b2f; }
-  .chat-message.self { border-color: #295d5a; background: #102326; }
-  .chat-message.remote { border-color: #2b395d; background: #111b2f; }
-  .chat-meta { display: flex; gap: 12px; flex-wrap: wrap; color: #8aa3d1; font-size: 0.9em; margin-bottom: 6px; }
-  .chat-channel-chip { border: 1px solid #37507e; border-radius: 999px; background: #13203a; color: #8aa3d1; padding: 2px 8px; cursor: pointer; }
-  .chat-channel-chip:hover { color: #fff; border-color: #5c7db6; }
+
+  /* === MESSAGES === */
+  .msg {
+    padding: 12px 0;
+    border-bottom: 1px solid #eae7e0;
+  }
+  .msg:last-child { border-bottom: none; }
+  .msg.self .msg-body { color: #444; }
+  .msg-head {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    margin-bottom: 5px;
+  }
+  .msg-from {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .msg-arrow { color: #ccc; font-size: 10px; }
+  .msg-to {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    color: #999;
+  }
+  .msg-time {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    color: #ccc;
+    margin-left: auto;
+  }
+  .msg-body { font-size: 13px; color: #555; line-height: 1.55; }
+
+  /* === CHAT MESSAGE CARDS (feed) === */
+  .chat-message { border: 1px solid #e0ddd6; border-radius: 8px; padding: 10px 12px; background: #fff; }
+  .chat-message.self { border-color: #c4c0b8; background: #faf8f5; }
+  .chat-message.remote { border-color: #e0ddd6; background: #fff; }
+  .chat-meta { display: flex; gap: 12px; flex-wrap: wrap; color: #999; font-size: 0.9em; margin-bottom: 6px; }
+  .chat-channel-chip { border: 1px solid #e0ddd6; border-radius: 999px; background: #faf8f5; color: #999; padding: 2px 8px; cursor: pointer; }
+  .chat-channel-chip:hover { color: #1a1a1a; border-color: #c4c0b8; }
   .chat-text { white-space: pre-wrap; word-break: break-word; line-height: 1.45; }
+
+  /* === CHAT STATUS === */
   .chat-status-row { display: flex; justify-content: space-between; gap: 12px; align-items: center; margin: 10px 0 6px 0; flex-wrap: wrap; }
-  .chat-follow { color: #8aa3d1; font-size: 0.9em; }
+  .chat-follow { color: #999; font-size: 0.9em; }
+  .chat-body { min-width: 360px; }
+  .chat-target { color: #c45a3c; }
+  .api-status { margin-top: 0.6em; color: #999; }
+
+  /* === CHAT PREVIEW === */
+  .chat-preview {
+    background: #fff;
+    border: 1px solid #e0ddd6;
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .chat-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 20px;
+    border-bottom: 1px solid #eae7e0;
+  }
+  .chat-channel {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .chat-channel-list {
+    display: flex;
+    gap: 12px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    color: #bbb;
+  }
+  .chat-channel-list span.active { color: #c45a3c; font-weight: 500; }
+  .chat-channel-list span:hover { color: #888; cursor: pointer; }
+  .chat-messages { padding: 16px 20px; }
+
+  /* === FORM ELEMENTS === */
+  input, textarea, button, select { font: inherit; }
+  input, textarea, select {
+    width: 100%;
+    background: #fff;
+    color: #1a1a1a;
+    border: 1px solid #e0ddd6;
+    border-radius: 6px;
+    padding: 8px 10px;
+  }
+  input:focus, textarea:focus, select:focus {
+    outline: none;
+    border-color: #c45a3c;
+    box-shadow: 0 0 0 2px rgba(196,90,60,0.12);
+  }
+  textarea { min-height: 100px; resize: vertical; }
+  label { font-size: 12px; font-weight: 600; color: #888; display: block; margin-bottom: 4px; }
+  button {
+    background: #c45a3c;
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 8px 14px;
+    cursor: pointer;
+    font-weight: 600;
+  }
+  button:hover { background: #a94a30; }
+
+  /* === AGENT CARDS === */
+  .agent-card {
+    background: #fff;
+    border: 1px solid #e0ddd6;
+    border-radius: 10px;
+    padding: 16px 20px;
+    margin-bottom: 8px;
+  }
+  .agent-card-name {
+    font-family: 'IBM Plex Mono', monospace;
+    font-weight: 600;
+    font-size: 13px;
+  }
+  .agent-card-meta { font-size: 12px; color: #999; margin-top: 4px; }
+
+  /* === KNOWLEDGE === */
+  .confidence { display: inline-block; background: #eae7e0; border-radius: 4px; width: 60px; height: 8px; overflow: hidden; vertical-align: middle; }
+  .confidence-fill { height: 100%; background: #2ecc71; }
+
+  /* === SYSTEM TAB === */
+  .panel { background: #fff; border: 1px solid #e0ddd6; border-radius: 8px; padding: 16px 18px; margin-bottom: 1em; }
+  .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; margin-bottom: 10px; }
+  .muted { color: #999; }
+  .tag { display: inline-block; background: #eae7e0; color: #888; padding: 2px 6px; border-radius: 3px; font-size: 0.85em; margin: 1px; }
+  .wm-key { font-family: 'IBM Plex Mono', monospace; color: #c45a3c; }
+  .copy-btn {
+    position: absolute;
+    top: 12px; right: 12px;
+    background: #c45a3c;
+    color: #fff;
+    border: none;
+    padding: 6px 14px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.85em;
+  }
+  .copy-btn.copied { background: #2ecc71; color: #fff; }
+  .prompt-box, pre {
+    background: #faf8f5;
+    border: 1px solid #eae7e0;
+    padding: 10px 12px;
+    border-radius: 6px;
+    overflow-x: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 13px;
+  }
+
+  /* === TABLES === */
+  table { border-collapse: collapse; width: 100%; margin-bottom: 2em; }
+  th, td { text-align: left; padding: 6px 12px; border-bottom: 1px solid #eae7e0; vertical-align: top; font-size: 13px; }
+  th { color: #aaa; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }
+
+  /* === STATUS COLORS === */
+  .status-idle { color: #999; }
+  .status-active, .status-working { color: #1a6b3a; }
+  .status-waiting { color: #8a6d2b; }
+  .session-active { color: #1a6b3a; }
+  .session-ended { color: #999; }
+  .event-type { font-family: 'IBM Plex Mono', monospace; color: #c45a3c; font-size: 12px; }
+  .agent { font-family: 'IBM Plex Mono', monospace; color: #1a1a1a; font-weight: 500; font-size: 12px; }
+  .pending { color: #8a6d2b; }
+  .claimed { color: #1a6b3a; }
+  .done, .success { color: #1a6b3a; }
+  .failed, .failure { color: #b33a3a; }
+
+  /* === PINNED === */
+  .pinned { border: 1px solid #c45a3c; border-radius: 8px; padding: 16px 20px; margin-bottom: 1em; background: #fdf9f7; position: relative; }
+  .pinned h3 { color: #c45a3c; margin: 0 0 8px 0; font-size: 1.05em; }
+
+  /* === RESPONSIVE === */
   @media (max-width: 760px) {
-    body { margin: 1em; }
+    .page { padding: 12px 16px; }
+    .hero-title { font-size: 32px; }
+    .hero-agents { gap: 16px; }
     th, td { padding: 6px 8px; }
     .chat-shell { grid-template-columns: 1fr; }
     .chat-sidebar { position: static; }
     .chat-feed { max-height: 50vh; }
+    .tabs { width: 100%; overflow-x: auto; }
   }
 </style>
 </head><body>
-<h1>Agent Memory</h1>
-<div class="muted">Shared state, agent registry, onboarding bundle, and cross-agent chat. &mdash; <a href="/live" style="color: #4ade80;">Live Activity</a></div>
+<div class="page">
 
-<div class="stats">
-  <div class="stat"><div class="stat-value">{{ stats.agents }}</div><div class="stat-label">Active States</div></div>
-  <div class="stat"><div class="stat-value">{{ agent_profiles|length }}</div><div class="stat-label">Known Agents</div></div>
-  <div class="stat"><div class="stat-value">{{ stats.tasks_pending }}</div><div class="stat-label">Pending Tasks</div></div>
-  <div class="stat"><div class="stat-value">{{ stats.events_total }}</div><div class="stat-label">Events</div></div>
-  <div class="stat"><div class="stat-value">{{ stats.chat_total }}</div><div class="stat-label">Chat Messages</div></div>
-  <div class="stat"><div class="stat-value">{{ stats.knowledge_active }}</div><div class="stat-label">Knowledge</div></div>
-  <div class="stat"><div class="stat-value">{{ "%.1f KB"|format(stats.db_size_bytes / 1024) }}</div><div class="stat-label">DB Size</div></div>
-</div>
+  <!-- Hero -->
+  <div class="hero">
+    <div class="hero-mark">
+      <svg viewBox="0 0 160 180" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="80" cy="72" r="64" stroke="currentColor" stroke-width="4" fill="none"/>
+        <path d="M60 44 L60 100 M60 44 L85 44 C100 44 108 52 108 62 C108 72 100 80 85 80 L60 80"
+              stroke="currentColor" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+        <circle cx="32" cy="148" r="10" stroke="currentColor" stroke-width="3.5" fill="none"/>
+        <circle cx="18" cy="172" r="5.5" stroke="currentColor" stroke-width="3" fill="none"/>
+      </svg>
+    </div>
+    <div class="hero-content">
+      <h1 class="hero-title">
+        <span class="count">{{ stats.agents }}</span> agent{{ 's' if stats.agents != 1 else '' }} working
+      </h1>
+    </div>
+  </div>
 
-{% for note in pinned_notes %}
-<div class="pinned">
-  <h3>{{ note.subject }}</h3>
-  <button class="copy-btn" onclick="copyText(this, 'note-{{ note.id }}')">Copy</button>
-  <pre id="note-{{ note.id }}">{{ note.object }}</pre>
-</div>
-{% endfor %}
+  <!-- Agent Strip -->
+  <div class="hero-agents">
+    {% for s in states %}
+    <div class="hero-agent">
+      <div class="hero-agent-ring {{ 'active' if s.status in ('active', 'working') else 'idle' }}">{{ s.agent_id[:2]|upper }}</div>
+      <div class="hero-agent-info">
+        <div class="hero-agent-name {{ 'idle' if s.status not in ('active', 'working') else '' }}">{{ s.agent_id }}</div>
+        <div class="hero-agent-task">{{ s.current_task or 'idle' }} &middot; {{ s.updated_at }}</div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
 
-<div class="tabs">
-  <div class="tab active" data-tab="overview" onclick="showTab('overview', this)">Overview</div>
-  <div class="tab" data-tab="chat" onclick="showTab('chat', this)">Chat</div>
-  <div class="tab" data-tab="agents" onclick="showTab('agents', this)">Agents</div>
-  <div class="tab" data-tab="working" onclick="showTab('working', this)">Working Memory</div>
-  <div class="tab" data-tab="episodes" onclick="showTab('episodes', this)">Episodes</div>
-  <div class="tab" data-tab="knowledge" onclick="showTab('knowledge', this)">Knowledge</div>
-  <div class="tab" data-tab="onboarding" onclick="showTab('onboarding', this)">Onboarding</div>
-</div>
+  <!-- Tabs -->
+  <div class="tabs">
+    <div class="tab active" data-tab="overview" onclick="showTab('overview', this)">Overview</div>
+    <div class="tab" data-tab="chat" onclick="showTab('chat', this)">Chat</div>
+    <div class="tab" data-tab="agents" onclick="showTab('agents', this)">Agents</div>
+    <div class="tab" data-tab="knowledge" onclick="showTab('knowledge', this)">Knowledge</div>
+    <div class="tab" data-tab="system" onclick="showTab('system', this)">System</div>
+  </div>
 
 <div id="tab-overview" class="tab-content active">
   <h2>Agent State</h2>
@@ -829,6 +1221,7 @@ startChatPolling();
 updateFollowStateLabel();
 syncTabFromHash();
 </script>
+</div>
 </body></html>
 """
 
