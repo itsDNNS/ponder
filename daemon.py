@@ -786,7 +786,7 @@ DASHBOARD_HTML = """<!doctype html>
 
   {% if agents_deactivated %}
   <details style="margin-top: 16px;">
-    <summary style="font-size: 13px; font-weight: 600; color: #ccc; cursor: pointer; user-select: none;">Deactivated ({{ agents_deactivated|length }}) <span style="font-weight: 400; font-size: 11px; color: #ccc;">&mdash; no activity for 7d+</span></summary>
+    <summary style="font-size: 13px; font-weight: 600; color: #666; cursor: pointer; user-select: none;">Deactivated ({{ agents_deactivated|length }}) <span style="font-weight: 400; font-size: 11px; color: #999;">&mdash; no activity for 7d+</span></summary>
     <div style="margin-top: 10px;">
     {% for profile in agents_deactivated %}
     <div class="agent-card" style="display:flex;justify-content:space-between;align-items:center;" id="agent-card-{{ profile.agent_id }}">
