@@ -789,13 +789,15 @@ DASHBOARD_HTML = """<!doctype html>
     <summary style="font-size: 13px; font-weight: 600; color: #ccc; cursor: pointer; user-select: none;">Deactivated ({{ agents_deactivated|length }}) <span style="font-weight: 400; font-size: 11px; color: #ccc;">&mdash; no activity for 7d+</span></summary>
     <div style="margin-top: 10px;">
     {% for profile in agents_deactivated %}
-    <div class="agent-card" style="opacity: 0.35;position:relative;" id="agent-card-{{ profile.agent_id }}">
-      <div class="agent-card-name">{{ profile.agent_id }}{% if profile.display_name and profile.display_name != profile.agent_id %} &mdash; <span class="agent-rename" onclick="renameAgent('{{ profile.agent_id }}', this)" title="Click to rename" style="cursor:pointer;border-bottom:1px dotted #ccc;">{{ profile.display_name }}</span>{% else %} <span class="agent-rename" onclick="renameAgent('{{ profile.agent_id }}', this)" title="Click to set display name" style="cursor:pointer;color:#ccc;border-bottom:1px dotted #ccc;font-size:11px;">set name</span>{% endif %}</div>
-      <div class="agent-card-meta">
-        <span class="muted">deactivated</span>
-        {% if profile.state and profile.state.updated_at %}<span class="relative-time" data-ts="{{ profile.state.updated_at }}">{{ profile.state.updated_at }}</span>{% endif %}
-        <span onclick="deleteAgent('{{ profile.agent_id }}')" style="margin-left:auto;cursor:pointer;color:#c45a3c;opacity:0.5;display:flex;" title="Remove agent (keeps knowledge and chat)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-12"/><path d="M9 7V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v3"/></svg></span>
+    <div class="agent-card" style="opacity: 0.35;display:flex;justify-content:space-between;align-items:center;" id="agent-card-{{ profile.agent_id }}">
+      <div>
+        <div class="agent-card-name">{{ profile.agent_id }}{% if profile.display_name and profile.display_name != profile.agent_id %} &mdash; <span class="agent-rename" onclick="renameAgent('{{ profile.agent_id }}', this)" title="Click to rename" style="cursor:pointer;border-bottom:1px dotted #ccc;">{{ profile.display_name }}</span>{% else %} <span class="agent-rename" onclick="renameAgent('{{ profile.agent_id }}', this)" title="Click to set display name" style="cursor:pointer;color:#ccc;border-bottom:1px dotted #ccc;font-size:11px;">set name</span>{% endif %}</div>
+        <div class="agent-card-meta">
+          <span class="muted">deactivated</span>
+          {% if profile.state and profile.state.updated_at %}<span class="relative-time" data-ts="{{ profile.state.updated_at }}">{{ profile.state.updated_at }}</span>{% endif %}
+        </div>
       </div>
+      <span onclick="deleteAgent('{{ profile.agent_id }}')" style="cursor:pointer;color:#c45a3c;display:flex;flex-shrink:0;padding:4px;" title="Remove agent (keeps knowledge and chat)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-12"/><path d="M9 7V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v3"/></svg></span>
     </div>
     {% endfor %}
     </div>
