@@ -726,23 +726,28 @@ DASHBOARD_HTML = """<!doctype html>
       <div style="font-size:11px;color:#999;margin-top:2px;">Deactivated</div>
     </div>
   </div>
-  {% if leaderboard %}
-  <div style="margin-bottom:24px;">
-    <div class="section-head"><div class="section-title">Leaderboard</div></div>
-    <div style="background:#fff;border:1px solid #e0ddd6;border-radius:10px;overflow:hidden;">
-      {% set deactivated_ids = agents_deactivated|map(attribute='agent_id')|list %}
-      {% for a in leaderboard if a.score > 0 and a.agent_id not in deactivated_ids %}
-      {% if loop.index <= 3 %}
-      <div style="display:grid;grid-template-columns:32px 1fr repeat(4,70px) 80px;gap:8px;align-items:center;padding:10px 16px;{{ 'border-top:1px solid #f0ede6;' if not loop.first else '' }}font-size:12px;{{ 'background:linear-gradient(90deg,rgba(212,160,23,0.06),transparent);' if loop.index == 1 else 'background:linear-gradient(90deg,rgba(138,138,138,0.05),transparent);' if loop.index == 2 else 'background:linear-gradient(90deg,rgba(184,115,51,0.05),transparent);' }}">
-        <span style="font-size:16px;font-weight:800;color:{{ '#d4a017' if loop.index == 1 else '#8a8a8a' if loop.index == 2 else '#b87333' }};">{{ loop.index }}</span>
-        <span style="font-family:'IBM Plex Mono',monospace;font-weight:600;">{{ a.display_name }}</span>
-        <span style="text-align:center;color:#999;" title="Messages"><span style="font-weight:600;color:#1a1a1a;">{{ a.messages }}</span> msgs</span>
-        <span style="text-align:center;color:#999;" title="Events"><span style="font-weight:600;color:#1a1a1a;">{{ a.events }}</span> evts</span>
-        <span style="text-align:center;color:#999;" title="Tasks created"><span style="font-weight:600;color:#1a1a1a;">{{ a.tasks_created }}</span> tasks</span>
-        <span style="text-align:center;color:#999;" title="Tasks done"><span style="font-weight:600;color:#1a1a1a;">{{ a.tasks_done }}</span> done</span>
-        <span style="text-align:right;font-weight:700;font-size:14px;color:{{ '#d4a017' if loop.index == 1 else '#8a8a8a' if loop.index == 2 else '#b87333' }};">{{ a.score }} pts</span>
+  {% set deactivated_ids = agents_deactivated|map(attribute='agent_id')|list %}
+  {% set top_agents = [] %}
+  {% for a in leaderboard if a.score > 0 and a.agent_id not in deactivated_ids %}
+    {% if top_agents|length < 3 %}{% if top_agents.append(a) %}{% endif %}{% endif %}
+  {% endfor %}
+  {% if top_agents %}
+  <div style="margin-bottom:28px;">
+    <div class="section-head"><div class="section-title">Employee of the Month</div></div>
+    <div style="display:flex;gap:12px;flex-wrap:wrap;">
+      {% for a in top_agents %}
+      <div style="flex:1;min-width:200px;background:#fff;border:1px solid {{ '#d4a017' if loop.index == 1 else '#c0c0c0' if loop.index == 2 else '#b87333' }};border-radius:12px;padding:20px;position:relative;overflow:hidden;{{ 'border-width:2px;' if loop.index == 1 else '' }}">
+        <div style="position:absolute;top:-8px;right:-8px;font-size:48px;opacity:0.08;font-weight:900;">{{ loop.index }}</div>
+        <div style="font-size:28px;margin-bottom:4px;">{{ '&#x1F451;' if loop.index == 1 else '&#x1F948;' if loop.index == 2 else '&#x1F949;' }}</div>
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:15px;font-weight:700;margin-bottom:2px;">{{ a.display_name }}</div>
+        <div style="font-size:11px;color:#999;margin-bottom:10px;">{{ a.agent_id }}</div>
+        <div style="font-size:24px;font-weight:800;color:{{ '#d4a017' if loop.index == 1 else '#8a8a8a' if loop.index == 2 else '#b87333' }};margin-bottom:8px;">{{ a.score }} <span style="font-size:12px;font-weight:500;color:#999;">pts</span></div>
+        <div style="display:flex;gap:12px;font-size:11px;color:#999;">
+          <span><strong style="color:#1a1a1a;">{{ a.messages }}</strong> msgs</span>
+          <span><strong style="color:#1a1a1a;">{{ a.events }}</strong> evts</span>
+          <span><strong style="color:#1a1a1a;">{{ a.tasks_created }}</strong> tasks</span>
+        </div>
       </div>
-      {% endif %}
       {% endfor %}
     </div>
   </div>
