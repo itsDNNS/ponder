@@ -479,6 +479,14 @@ DASHBOARD_HTML = """<!doctype html>
   .confidence { display: inline-block; background: #eae7e0; border-radius: 4px; width: 60px; height: 8px; overflow: hidden; vertical-align: middle; }
   .confidence-fill { height: 100%; background: #2ecc71; }
 
+  /* Knowledge */
+  .k-pill { font-family: 'IBM Plex Mono', monospace; font-size: 11px; padding: 4px 10px; border-radius: 5px; cursor: pointer; border: 1px solid #e0ddd6; background: #fff; color: #888; transition: all 0.12s; display: inline-block; }
+  .k-pill:hover { border-color: #c4c0b8; color: #1a1a1a; }
+  .k-pill.active { background: #1a1a1a; color: #fff; border-color: #1a1a1a; }
+  .k-card { background: #fff; border: 1px solid #e0ddd6; border-radius: 10px; padding: 14px 18px; margin-bottom: 6px; transition: border-color 0.12s; }
+  .k-card:hover { border-color: #c4c0b8; }
+  .k-card[hidden] { display: none; }
+
   /* === SYSTEM TAB === */
   .panel { background: #fff; border: 1px solid #e0ddd6; border-radius: 8px; padding: 16px 18px; margin-bottom: 1em; }
   .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; margin-bottom: 10px; }
@@ -807,22 +815,69 @@ DASHBOARD_HTML = """<!doctype html>
 
 
 <div id="tab-knowledge" class="tab-content">
-  <div class="section-head"><div class="section-title">Knowledge Base</div></div>
-  <table>
-    <tr><th>#</th><th>Category</th><th>Subject</th><th>Predicate</th><th>Object</th><th>Confidence</th><th>Source</th></tr>
-    {% for k in all_knowledge %}
-    <tr>
-      <td>{{ k.id }}</td>
-      <td>{{ k.category }}</td>
-      <td><strong>{{ k.subject }}</strong></td>
-      <td>{{ k.predicate }}</td>
-      <td>{{ k.object }}</td>
-      <td><div class="confidence"><div class="confidence-fill" style="width:{{ (k.confidence * 100)|int }}%"></div></div> {{ "%.0f"|format(k.confidence * 100) }}%</td>
-      <td>{{ k.source or '-' }}</td>
-    </tr>
+  <div style="display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap;">
+    <div style="background:#fff;border:1px solid #e0ddd6;border-radius:8px;padding:14px 20px;flex:1;min-width:100px;">
+      <div style="font-size:28px;font-weight:800;">{{ all_knowledge|length }}</div>
+      <div style="font-size:11px;color:#999;margin-top:2px;">Total Entries</div>
+    </div>
+    {% for cat, count in knowledge_categories_sorted[:4] %}
+    <div style="background:#fff;border:1px solid #e0ddd6;border-radius:8px;padding:14px 20px;flex:1;min-width:100px;">
+      <div style="font-size:28px;font-weight:800;">{{ count }}</div>
+      <div style="font-size:11px;color:#999;margin-top:2px;">{{ cat|title }}</div>
+    </div>
     {% endfor %}
-    {% if not all_knowledge %}<tr><td colspan="7" class="muted">No knowledge yet</td></tr>{% endif %}
-  </table>
+  </div>
+
+  <div style="margin-bottom:12px;">
+    <input id="knowledge-search" type="text" placeholder="Search knowledge..." oninput="filterKnowledge()" style="width:100%;font-size:13px;padding:10px 14px;border:1px solid #e0ddd6;border-radius:8px;background:#fff;">
+  </div>
+
+  <div id="knowledge-cat-pills" style="display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap;">
+    <span class="k-pill active" onclick="setKnowledgeCategory('all', this)">All <span style="font-size:10px;color:#888;margin-left:2px;">{{ all_knowledge|length }}</span></span>
+    {% for cat, count in knowledge_categories_sorted %}
+    <span class="k-pill" onclick="setKnowledgeCategory('{{ cat }}', this)">{{ cat }} <span style="font-size:10px;color:#bbb;margin-left:2px;">{{ count }}</span></span>
+    {% endfor %}
+  </div>
+
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+    <div class="section-title" style="margin:0;">
+      <span id="knowledge-showing">{{ all_knowledge|length }}</span> entries
+    </div>
+    <div style="display:flex;gap:4px;">
+      <span id="k-sort-confidence" onclick="setKnowledgeSort('confidence')" style="font-size:10px;color:#999;cursor:pointer;border:1px solid #e0ddd6;padding:2px 8px;border-radius:4px;background:#1a1a1a;color:#fff;">by confidence</span>
+      <span id="k-sort-alpha" onclick="setKnowledgeSort('alpha')" style="font-size:10px;color:#999;cursor:pointer;border:1px solid #e0ddd6;padding:2px 8px;border-radius:4px;background:#fff;">A-Z</span>
+      <span id="k-sort-newest" onclick="setKnowledgeSort('newest')" style="font-size:10px;color:#999;cursor:pointer;border:1px solid #e0ddd6;padding:2px 8px;border-radius:4px;background:#fff;">newest</span>
+    </div>
+  </div>
+
+  <div id="knowledge-cards">
+    {% for k in all_knowledge %}
+    <div class="k-card" data-category="{{ k.category }}" data-subject="{{ k.subject|lower }}" data-object="{{ k.object|lower if k.object else '' }}" data-predicate="{{ k.predicate|lower if k.predicate else '' }}" data-confidence="{{ k.confidence }}" data-id="{{ k.id }}">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:4px;">
+        <div style="font-size:14px;font-weight:600;">{{ k.subject }}</div>
+        <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;padding:2px 8px;border-radius:4px;background:#f5f3ef;color:#888;">{{ k.category }}</span>
+          <div style="display:flex;align-items:center;gap:4px;">
+            <div style="width:36px;height:5px;background:#eae7e0;border-radius:3px;overflow:hidden;"><div style="height:100%;background:#2ecc71;border-radius:3px;width:{{ (k.confidence * 100)|int }}%;"></div></div>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#999;">{{ "%.0f"|format(k.confidence * 100) }}%</span>
+          </div>
+        </div>
+      </div>
+      {% if k.predicate %}<div style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#c45a3c;margin-bottom:4px;">{{ k.predicate }}</div>{% endif %}
+      {% if k.object %}
+      <div class="k-object-truncated" style="font-size:13px;color:#666;line-height:1.5;max-height:3em;overflow:hidden;position:relative;">{{ k.object }}</div>
+      {% if k.object|length > 150 %}
+      <span class="k-expand" onclick="toggleKnowledgeCard(this)" style="font-size:11px;color:#c45a3c;cursor:pointer;">show more</span>
+      {% endif %}
+      {% endif %}
+      <div style="display:flex;gap:12px;margin-top:6px;font-size:11px;color:#ccc;">
+        {% if k.source %}<span>{{ k.source }}</span>{% endif %}
+        {% if k.validated_by %}<span>validated: {{ k.validated_by }}</span>{% endif %}
+      </div>
+    </div>
+    {% endfor %}
+    {% if not all_knowledge %}<div class="muted">No knowledge yet</div>{% endif %}
+  </div>
 </div>
 
 <div id="tab-system" class="tab-content">
@@ -1504,6 +1559,57 @@ refreshChatChannels();
 refreshChatFeed({ forceScroll: true });
 startChatPolling();
 updateFollowStateLabel();
+var knowledgeState = { category: 'all', sort: 'confidence' };
+
+function filterKnowledge() {
+  var q = (document.getElementById('knowledge-search').value || '').toLowerCase();
+  var cards = document.querySelectorAll('#knowledge-cards .k-card');
+  var shown = 0;
+  cards.forEach(function(card) {
+    var cat = card.getAttribute('data-category');
+    var matchesCat = knowledgeState.category === 'all' || cat === knowledgeState.category;
+    var matchesSearch = !q || card.getAttribute('data-subject').indexOf(q) !== -1 || card.getAttribute('data-object').indexOf(q) !== -1 || card.getAttribute('data-predicate').indexOf(q) !== -1 || cat.indexOf(q) !== -1;
+    if (matchesCat && matchesSearch) { card.hidden = false; shown++; } else { card.hidden = true; }
+  });
+  var el = document.getElementById('knowledge-showing');
+  if (el) el.textContent = shown;
+}
+
+function setKnowledgeCategory(cat, el) {
+  knowledgeState.category = cat;
+  document.querySelectorAll('#knowledge-cat-pills .k-pill').forEach(function(p) { p.classList.remove('active'); });
+  if (el) el.classList.add('active');
+  filterKnowledge();
+}
+
+function setKnowledgeSort(sort) {
+  knowledgeState.sort = sort;
+  ['confidence', 'alpha', 'newest'].forEach(function(s) {
+    var btn = document.getElementById('k-sort-' + s);
+    if (btn) { btn.style.background = s === sort ? '#1a1a1a' : '#fff'; btn.style.color = s === sort ? '#fff' : '#999'; }
+  });
+  var container = document.getElementById('knowledge-cards');
+  var cards = Array.from(container.querySelectorAll('.k-card'));
+  cards.sort(function(a, b) {
+    if (sort === 'confidence') return parseFloat(b.getAttribute('data-confidence')) - parseFloat(a.getAttribute('data-confidence'));
+    if (sort === 'alpha') return a.getAttribute('data-subject').localeCompare(b.getAttribute('data-subject'));
+    if (sort === 'newest') return parseInt(b.getAttribute('data-id')) - parseInt(a.getAttribute('data-id'));
+    return 0;
+  });
+  cards.forEach(function(card) { container.appendChild(card); });
+}
+
+function toggleKnowledgeCard(el) {
+  var obj = el.previousElementSibling;
+  if (obj.style.maxHeight === 'none') {
+    obj.style.maxHeight = '3em';
+    el.textContent = 'show more';
+  } else {
+    obj.style.maxHeight = 'none';
+    el.textContent = 'show less';
+  }
+}
+
 function updateRelativeTimes() {
   document.querySelectorAll('.relative-time').forEach(function(el) {
     var ts = el.getAttribute('data-ts');
@@ -1644,8 +1750,13 @@ def dashboard():
             except (json.JSONDecodeError, TypeError):
                 pass
 
-    all_knowledge = mem.recall(limit=100)
+    all_knowledge = mem.recall(limit=1000)
     pinned_notes = [k for k in all_knowledge if k.get("category") == "pinned"]
+    knowledge_categories = {}
+    for k in all_knowledge:
+        cat = k.get("category", "other")
+        knowledge_categories[cat] = knowledge_categories.get(cat, 0) + 1
+    knowledge_categories_sorted = sorted(knowledge_categories.items(), key=lambda x: x[1], reverse=True)
     agent_profiles = mem.list_agent_profiles()
     now = datetime.now(timezone.utc)
     agents_active, agents_inactive, agents_deactivated = [], [], []
@@ -1713,6 +1824,7 @@ def dashboard():
         wm_by_agent=wm_by_agent,
         all_episodes=all_episodes,
         all_knowledge=all_knowledge,
+        knowledge_categories_sorted=knowledge_categories_sorted,
         pinned_notes=pinned_notes,
         default_onboarding_agent=default_onboarding_agent,
         default_chat_channel=default_chat_channel,
