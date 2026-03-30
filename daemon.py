@@ -69,6 +69,7 @@ logging.basicConfig(
 STARTUP_TIME = datetime.now(timezone.utc)
 
 PORT = int(os.environ.get("PONDER_PORT", 9077))
+PONDER_URL = os.environ.get("PONDER_URL", f"http://localhost:{PORT}")
 DOCKER = os.environ.get("DOCKER", "").strip() == "1"
 PID_FILE = Path.home() / ".ponder" / "ponder" / "daemon.pid"
 
@@ -2509,6 +2510,11 @@ def _parse_event_data(events):
 
 @app.route("/")
 def dashboard():
+    # First-run wizard: show setup if no agents registered
+    agent_profiles = mem.list_agent_profiles()
+    if not agent_profiles:
+        return render_template_string(WIZARD_HTML, ponder_url=PONDER_URL)
+
     # Gather working memory for all active sessions
     wm_by_agent = {}
     sessions = mem.list_sessions(limit=50)
