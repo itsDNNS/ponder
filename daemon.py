@@ -621,7 +621,7 @@ DASHBOARD_HTML = """<!doctype html>
       <span class="tl-who">{{ e.source_agent }}</span>
       <span class="tl-text">
         <strong>{{ e.event_type }}</strong>{% if e.target_agent %} &rarr; {{ e.target_agent }}{% endif %}
-        {% if e.data %}{% set d = e.data_parsed or {} %} &mdash; {{ d.get('msg') or d.get('summary') or d.get('title') or d.get('reason') or (e.data[:80] if e.data is string else '') }}{% endif %}
+        {% if e.data %}{% set d = e.data_parsed or {} %} &mdash; {{ d.get('msg') or d.get('summary') or d.get('title') or d.get('reason') or d.get('branch') or (e.data[:80] if e.data is string else '') }}{% endif %}
       </span>
     </div>
     {% endfor %}
