@@ -1225,6 +1225,10 @@ async function sendChatMessage() {
     status.textContent = 'Sender and message are required.';
     return;
   }
+  if (channel.toLowerCase() === 'all') {
+    status.textContent = '"all" is reserved. Pick a channel name.';
+    return;
+  }
   status.textContent = 'Sending...';
   try {
     await postJson('/api/chat', {
@@ -1532,10 +1536,13 @@ def api_chat_create():
     data = request.get_json(force=True)
     if not data.get("sender_agent") or not data.get("body"):
         return jsonify({"error": "sender_agent and body required"}), 400
+    channel = data.get("channel", "general").strip().lower()
+    if channel == "all":
+        return jsonify({"error": "'all' is a reserved channel name"}), 400
     message_id = mem.append_chat_message(
         sender_agent=data["sender_agent"],
         body=data["body"],
-        channel=data.get("channel", "general"),
+        channel=channel,
         target_agent=data.get("target_agent"),
         metadata=data.get("metadata"),
     )
