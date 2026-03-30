@@ -356,6 +356,10 @@ DASHBOARD_HTML = """<!doctype html>
     border-bottom: 1px solid #eae7e0;
   }
   .msg:last-child { border-bottom: none; }
+  .msg-continuation { padding-top: 2px; border-bottom: none; }
+  .msg-continuation + .msg:not(.msg-continuation) { border-top: 1px solid #eae7e0; }
+  .msg-head-mini { margin-bottom: 2px; }
+  .msg-head-mini .msg-time { font-size: 9px; color: #ccc; }
   .msg.self .msg-body { color: #444; }
   .msg-head {
     display: flex;
@@ -1032,24 +1036,25 @@ function renderChatMessages(messages) {
     return;
   }
 
-  feed.innerHTML = messages.map((msg) => {
+  var prevSender = null;
+  feed.innerHTML = messages.map((msg, i) => {
     const sender = escapeHtml(msg.sender_agent);
     const target = escapeHtml(msg.target_agent || '');
-    const body = msg.body || '';
     const created = escapeHtml(msg.created_at);
     const isSelf = watchAgent && sender.toLowerCase() === watchAgent;
-    const cls = isSelf ? 'msg self' : 'msg';
+    const sameSender = msg.sender_agent === prevSender;
+    prevSender = msg.sender_agent;
+    const cls = (isSelf ? 'msg self' : 'msg') + (sameSender ? ' msg-continuation' : '');
     const senderColor = agentColor(msg.sender_agent);
     const targetHtml = target
       ? `<span class="msg-arrow">&rarr;</span><span class="msg-to" style="color:${agentColor(msg.target_agent)}">${target}</span>`
       : '';
+    const headerHtml = sameSender
+      ? `<div class="msg-head msg-head-mini"><span class="msg-time relative-time" data-ts="${created}">${formatRelativeTime(msg.created_at)}</span></div>`
+      : `<div class="msg-head"><span class="msg-from" style="color:${senderColor}">${sender}</span>${targetHtml}<span class="msg-time relative-time" data-ts="${created}">${formatRelativeTime(msg.created_at)}</span></div>`;
     return `
       <div class="${cls}" data-id="${msg.id}">
-        <div class="msg-head">
-          <span class="msg-from" style="color:${senderColor}">${sender}</span>
-          ${targetHtml}
-          <span class="msg-time relative-time" data-ts="${created}">${formatRelativeTime(msg.created_at)}</span>
-        </div>
+        ${headerHtml}
         <div class="msg-body">${renderMarkdown(msg.body)}</div>
       </div>
     `;
