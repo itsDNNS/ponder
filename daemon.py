@@ -686,7 +686,7 @@ DASHBOARD_HTML = """<!doctype html>
       <input type="hidden" id="chat-watch-agent" value="{{ default_onboarding_agent }}">
       <input type="hidden" id="chat-channel" value="{{ default_chat_channel if default_chat_channel != 'all' else 'general' }}">
       <input type="hidden" id="chat-target" value="">
-      <input type="hidden" id="chat-sender" value="Dennis">
+      <input type="hidden" id="chat-sender" value="">
       <div style="border: 1px solid #e0ddd6; border-radius: 10px; padding: 10px 14px; margin-top: 10px; background: #fff;">
         <div style="display: flex; gap: 8px; align-items: end;">
           <div style="flex: 1;">
@@ -695,7 +695,7 @@ DASHBOARD_HTML = """<!doctype html>
           <button onclick="sendChatMessage()" style="height: 40px; padding: 0 20px;">Send</button>
         </div>
         <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 6px;">
-          <span id="chat-post-hint" class="muted" style="font-size: 11px;">Posting to <strong id="chat-post-channel-label">#general</strong> as Dennis</span>
+          <span id="chat-post-hint" class="muted" style="font-size: 11px;">Posting to <strong id="chat-post-channel-label">#general</strong> as <span id="chat-sender-label" style="cursor:pointer; text-decoration: underline dotted;" onclick="changeChatNickname()">...</span></span>
           <span id="chat-status" class="muted" style="font-size: 11px;"></span>
         </div>
       </div>
@@ -1211,14 +1211,34 @@ function startChatPolling() {
   }, CHAT_POLL_INTERVAL_MS);
 }
 
+function getChatNickname() {
+  var nick = localStorage.getItem('ponder_nickname') || '';
+  document.getElementById('chat-sender').value = nick;
+  document.getElementById('chat-sender-label').textContent = nick || 'set nickname';
+  return nick;
+}
+function changeChatNickname() {
+  var current = localStorage.getItem('ponder_nickname') || '';
+  var nick = prompt('Your chat nickname:', current);
+  if (nick !== null && nick.trim()) {
+    localStorage.setItem('ponder_nickname', nick.trim());
+    getChatNickname();
+  }
+}
+getChatNickname();
+
 async function sendChatMessage() {
   const sender = document.getElementById('chat-sender').value.trim();
   const target = document.getElementById('chat-target').value.trim();
   const channel = document.getElementById('chat-channel').value.trim() || (chatState.activeChannel !== 'all' ? chatState.activeChannel : 'general');
   const body = document.getElementById('chat-body').value.trim();
   const status = document.getElementById('chat-status');
-  if (!sender || !body) {
-    status.textContent = 'Sender and message are required.';
+  if (!sender) {
+    changeChatNickname();
+    return;
+  }
+  if (!body) {
+    status.textContent = 'Message is empty.';
     return;
   }
   if (channel.toLowerCase() === 'all') {
