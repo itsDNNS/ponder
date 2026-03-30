@@ -552,6 +552,9 @@ DASHBOARD_HTML = """<!doctype html>
     .chat-sidebar { position: static; }
     .chat-feed { max-height: 50vh; }
     .tabs { width: 100%; overflow-x: auto; }
+    .sys-health-grid { grid-template-columns: repeat(2, 1fr) !important; }
+    .sys-wm-grid { grid-template-columns: 1fr !important; }
+    .sys-maint-grid { grid-template-columns: 1fr !important; }
   }
 </style>
 </head><body>
