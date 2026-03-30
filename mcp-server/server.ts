@@ -287,8 +287,8 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
 
         const incoming = messages.filter(m => m.sender_agent.toLowerCase() !== agentIdLower)
 
-        // Advance shared cursor so polling doesn't replay these messages
-        if (messages.length > 0) {
+        // Only advance shared cursor when caller provided since_id (incremental read)
+        if (sinceId > 0 && messages.length > 0) {
           lastSeenMessageId = Math.max(lastSeenMessageId, ...messages.map(m => m.id))
         }
 
