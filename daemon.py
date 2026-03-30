@@ -708,19 +708,53 @@ DASHBOARD_HTML = """<!doctype html>
 </div>
 
 <div id="tab-agents" class="tab-content">
-  <div class="section-head"><div class="section-title">Agent Registry</div></div>
-  {% for profile in agent_profiles %}
+  <div class="section-head"><div class="section-title">Active Agents</div></div>
+  {% for profile in agents_active %}
   <div class="agent-card">
     <div class="agent-card-name">{{ profile.agent_id }}{% if profile.display_name %} &mdash; {{ profile.display_name }}{% endif %}</div>
     <div class="agent-card-meta">
       <span class="status-{{ profile.state.status if profile.state else 'idle' }}">{{ profile.state.status if profile.state else 'idle' }}</span>
-      {% if profile.integration_mode %}<span>{{ profile.integration_mode }}</span>{% endif %}
-      {% if profile.native_feature %}<span>{{ profile.native_feature }}</span>{% endif %}
+      {% if profile.state and profile.state.current_task %}<span>{{ profile.state.current_task }}</span>{% endif %}
+      {% if profile.state and profile.state.updated_at %}<span class="relative-time" data-ts="{{ profile.state.updated_at }}">{{ profile.state.updated_at }}</span>{% endif %}
     </div>
     {% if profile.onboarding_note %}<div class="muted" style="margin-top: 4px; font-size: 12px;">{{ profile.onboarding_note }}</div>{% endif %}
   </div>
   {% endfor %}
-  {% if not agent_profiles %}<div class="muted">No agents registered yet</div>{% endif %}
+  {% if not agents_active %}<div class="muted">No active agents</div>{% endif %}
+
+  {% if agents_inactive %}
+  <details style="margin-top: 20px;">
+    <summary style="font-size: 13px; font-weight: 600; color: #999; cursor: pointer; user-select: none;">Inactive ({{ agents_inactive|length }}) <span style="font-weight: 400; font-size: 11px; color: #bbb;">&mdash; no activity for 72h+</span></summary>
+    <div style="margin-top: 10px;">
+    {% for profile in agents_inactive %}
+    <div class="agent-card" style="opacity: 0.6;">
+      <div class="agent-card-name">{{ profile.agent_id }}{% if profile.display_name %} &mdash; {{ profile.display_name }}{% endif %}</div>
+      <div class="agent-card-meta">
+        <span class="muted">inactive</span>
+        {% if profile.state and profile.state.updated_at %}<span class="relative-time" data-ts="{{ profile.state.updated_at }}">{{ profile.state.updated_at }}</span>{% endif %}
+      </div>
+    </div>
+    {% endfor %}
+    </div>
+  </details>
+  {% endif %}
+
+  {% if agents_deactivated %}
+  <details style="margin-top: 16px;">
+    <summary style="font-size: 13px; font-weight: 600; color: #ccc; cursor: pointer; user-select: none;">Deactivated ({{ agents_deactivated|length }}) <span style="font-weight: 400; font-size: 11px; color: #ccc;">&mdash; no activity for 7d+</span></summary>
+    <div style="margin-top: 10px;">
+    {% for profile in agents_deactivated %}
+    <div class="agent-card" style="opacity: 0.35;">
+      <div class="agent-card-name">{{ profile.agent_id }}{% if profile.display_name %} &mdash; {{ profile.display_name }}{% endif %}</div>
+      <div class="agent-card-meta">
+        <span class="muted">deactivated</span>
+        {% if profile.state and profile.state.updated_at %}<span class="relative-time" data-ts="{{ profile.state.updated_at }}">{{ profile.state.updated_at }}</span>{% endif %}
+      </div>
+    </div>
+    {% endfor %}
+    </div>
+  </details>
+  {% endif %}
 </div>
 
 
@@ -1532,6 +1566,22 @@ def dashboard():
     all_knowledge = mem.recall(limit=100)
     pinned_notes = [k for k in all_knowledge if k.get("category") == "pinned"]
     agent_profiles = mem.list_agent_profiles()
+    now = datetime.now(timezone.utc)
+    agents_active, agents_inactive, agents_deactivated = [], [], []
+    for p in agent_profiles:
+        updated = None
+        if p.get("state") and p["state"].get("updated_at"):
+            try:
+                ts = p["state"]["updated_at"]
+                updated = datetime.fromisoformat(ts.replace(" ", "T") + ("+00:00" if "+" not in ts and "Z" not in ts else "").replace("Z", "+00:00"))
+            except (ValueError, TypeError):
+                pass
+        if updated and (now - updated) > timedelta(days=7):
+            agents_deactivated.append(p)
+        elif updated and (now - updated) > timedelta(hours=72):
+            agents_inactive.append(p)
+        else:
+            agents_active.append(p)
     default_onboarding_agent = request.args.get("agent_id") or (
         agent_profiles[0]["agent_id"] if agent_profiles else "codex"
     )
@@ -1547,6 +1597,9 @@ def dashboard():
         chat_messages=mem.get_chat_messages(limit=50),
         chat_channels=mem.list_chat_channels(limit=20),
         agent_profiles=agent_profiles,
+        agents_active=agents_active,
+        agents_inactive=agents_inactive,
+        agents_deactivated=agents_deactivated,
         sessions=sessions[:20],
         wm_by_agent=wm_by_agent,
         all_episodes=all_episodes,
