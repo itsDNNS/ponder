@@ -584,35 +584,30 @@ DASHBOARD_HTML = """<!doctype html>
   </div>
 
 <div id="tab-overview" class="tab-content active">
-  <h2>Agent State</h2>
-  <table>
-    <tr><th>Agent</th><th>Status</th><th>Current Task</th><th>Updated</th></tr>
-    {% for s in states %}
-    <tr>
-      <td class="agent">{{ s.agent_id }}</td>
-      <td class="status-{{ s.status }}">{{ s.status }}</td>
-      <td>{{ s.current_task or '-' }}</td>
-      <td>{{ s.updated_at }}</td>
-    </tr>
-    {% endfor %}
-    {% if not states %}<tr><td colspan="4" class="muted">No agents registered yet</td></tr>{% endif %}
-  </table>
-
-  <h2>Tasks</h2>
-  <table>
-    <tr><th>#</th><th>Title</th><th>Status</th><th>Assigned</th><th>Created By</th><th>Created</th></tr>
+  <div class="section">
+    <div class="section-head">
+      <div class="section-title">Tasks</div>
+      <a class="section-link">view all &rarr;</a>
+    </div>
     {% for t in tasks %}
-    <tr>
-      <td>{{ t.id }}</td>
-      <td>{{ t.title }}</td>
-      <td class="{{ t.status }}">{{ t.status }}</td>
-      <td class="agent">{{ t.assigned_to or '-' }}</td>
-      <td class="agent">{{ t.created_by }}</td>
-      <td>{{ t.created_at }}</td>
-    </tr>
+    <div class="task {{ 'done' if t.status in ('done', 'completed', 'success') else '' }}">
+      <div>
+        <div class="task-row">
+          <span class="task-num">#{{ t.id }}</span>
+          <span class="task-title">{{ t.title }}</span>
+        </div>
+        <div class="task-sub">
+          {{ t.assigned_to or '-' }}
+          {% if t.created_by and t.created_by != t.assigned_to %} &middot; from {{ t.created_by }}{% endif %}
+          {% if t.priority %} &middot; <strong>{{ t.priority }}</strong>{% endif %}
+          &middot; <span class="relative-time" data-ts="{{ t.created_at }}">{{ t.created_at }}</span>
+        </div>
+      </div>
+      <span class="pill pill-{{ t.status }}">{{ t.status }}</span>
+    </div>
     {% endfor %}
-    {% if not tasks %}<tr><td colspan="6" class="muted">No tasks yet</td></tr>{% endif %}
-  </table>
+    {% if not tasks %}<div class="muted">No tasks yet</div>{% endif %}
+  </div>
 
   <h2>Recent Events</h2>
   <table>
