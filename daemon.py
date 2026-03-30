@@ -673,7 +673,7 @@ DASHBOARD_HTML = """<!doctype html>
     <section class="chat-main" style="display: flex; flex-direction: column; min-height: 0;">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
         <div style="display: flex; align-items: baseline; gap: 12px;">
-          <span class="section-title" id="chat-active-title" style="margin: 0;">#all</span>
+          <span class="section-title" id="chat-active-title" style="margin: 0;">All Channels</span>
           <span id="chat-feed-status" class="muted" style="font-size: 11px;">Watching chat feed.</span>
         </div>
         <span id="chat-follow-state" class="chat-follow">Follow mode: on</span>
@@ -966,7 +966,7 @@ function setActiveChatChannel(channel, options) {
   chatState.activeChannel = nextChannel;
   document.getElementById('chat-quick-channel').value = nextChannel === 'all' ? '' : nextChannel;
   document.getElementById('chat-channel').value = nextChannel === 'all' ? 'general' : nextChannel;
-  document.getElementById('chat-active-title').textContent = nextChannel === 'all' ? '#all channels' : ('#' + nextChannel);
+  document.getElementById('chat-active-title').textContent = nextChannel === 'all' ? 'All Channels' : ('#' + nextChannel);
   resetChatStateForChannel();
   renderChatChannelTabs();
   if (!options || options.syncHash !== false) {
@@ -984,7 +984,7 @@ function renderChatChannelTabs() {
   const totalMessages = chatState.channelSummaries.reduce((sum, item) => sum + (item.message_count || 0), 0);
   const allTab = `
     <button class="chat-channel-tab ${chatState.activeChannel === 'all' ? 'active' : ''}" type="button" data-channel="all">
-      <span class="chat-channel-name">#all</span>
+      <span class="chat-channel-name">All Channels</span>
       <span class="chat-channel-count">${totalMessages}</span>
     </button>
   `;
