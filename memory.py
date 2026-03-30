@@ -20,32 +20,7 @@ from pathlib import Path
 
 DEFAULT_DB_PATH = Path(os.environ.get("PONDER_DB", str(Path.home() / ".ponder" / "ponder" / "agent.db")))
 
-DEFAULT_AGENT_PROFILES = {
-    "claude": {
-        "display_name": "Claude",
-        "integration_mode": "native_or_file",
-        "integration_target": "Use Claude-native startup instructions or CLAUDE.md only when that runtime explicitly supports it.",
-        "native_feature": "Claude-compatible startup instructions",
-        "onboarding_note": "Do not create Codex- or Nova-specific config files. Stay inside Claude-supported mechanisms.",
-        "metadata": {"builtin": True},
-    },
-    "codex": {
-        "display_name": "Codex",
-        "integration_mode": "native",
-        "integration_target": "Use Codex developer instructions, AGENTS.md, config.toml, or the host's Codex-native startup feature.",
-        "native_feature": "Codex native instruction stack",
-        "onboarding_note": "Do not create or rely on ~/.claude/CLAUDE.md. Use Codex-native features instead.",
-        "metadata": {"builtin": True},
-    },
-    "nova": {
-        "display_name": "Nova",
-        "integration_mode": "native",
-        "integration_target": "Use Nova's own persistent agent configuration or host-managed startup prompt.",
-        "native_feature": "Nova native startup configuration",
-        "onboarding_note": "Do not borrow file conventions from other agents. Keep onboarding inside Nova's own mechanism.",
-        "metadata": {"builtin": True},
-    },
-}
+DEFAULT_AGENT_PROFILES = {}
 
 SCHEMA = """
 PRAGMA journal_mode = WAL;
@@ -263,21 +238,14 @@ class AgentMemory:
     def _default_agent_profile(self, agent_id):
         agent_key = (agent_id or "agent").strip() or "agent"
         canonical_agent_id = agent_key.lower()
-        profile = DEFAULT_AGENT_PROFILES.get(canonical_agent_id)
-        if profile:
-            return {
-                "agent_id": canonical_agent_id,
-                **profile,
-                "metadata": dict(profile.get("metadata") or {}),
-            }
         return {
-            "agent_id": agent_key,
-            "display_name": agent_key,
-            "integration_mode": "native_or_session_bootstrap",
-            "integration_target": "Use the agent's own native persistent instructions, startup hooks, or host-managed developer instructions when available.",
-            "native_feature": "Agent-native startup instructions or hooks",
-            "onboarding_note": "Do not create configuration files for unrelated agent ecosystems. If no native feature exists, run the bootstrap at the start of each session.",
-            "metadata": {"builtin": False, "auto_generated": True},
+            "agent_id": canonical_agent_id,
+            "display_name": canonical_agent_id,
+            "integration_mode": None,
+            "integration_target": None,
+            "native_feature": None,
+            "onboarding_note": None,
+            "metadata": {},
         }
 
     def _merge_agent_profile(self, row, include_state=True, requested_agent_id=None):
