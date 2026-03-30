@@ -711,75 +711,26 @@ DASHBOARD_HTML = """<!doctype html>
 </div>
 
 <div id="tab-agents" class="tab-content">
-  <h2>Agent Registry</h2>
-  <table>
-    <tr><th>Agent</th><th>Display Name</th><th>Status</th><th>Integration Mode</th><th>Integration Target</th><th>Native Feature</th><th>Onboarding Note</th></tr>
-    {% for profile in agent_profiles %}
-    <tr>
-      <td class="agent">{{ profile.agent_id }}</td>
-      <td>{{ profile.display_name }}</td>
-      <td class="status-{{ profile.state.status if profile.state else 'idle' }}">{{ profile.state.status if profile.state else 'idle' }}</td>
-      <td>{{ profile.integration_mode }}</td>
-      <td>{{ profile.integration_target }}</td>
-      <td>{{ profile.native_feature }}</td>
-      <td>{{ profile.onboarding_note }}</td>
-    </tr>
-    {% endfor %}
-  </table>
-</div>
-
-<div id="tab-working" class="tab-content">
-  <h2>Active Sessions</h2>
-  <table>
-    <tr><th>Session</th><th>Agent</th><th>Started</th><th>Status</th></tr>
-    {% for s in sessions %}
-    <tr>
-      <td>{{ s.id }}</td>
-      <td class="agent">{{ s.agent_id }}</td>
-      <td>{{ s.started_at }}</td>
-      <td class="{{ 'session-active' if not s.ended_at else 'session-ended' }}">{{ 'active' if not s.ended_at else 'ended' }}</td>
-    </tr>
-    {% endfor %}
-    {% if not sessions %}<tr><td colspan="4" class="muted">No sessions</td></tr>{% endif %}
-  </table>
-
-  <h2>Working Memory</h2>
-  {% for agent_id, wm_data in wm_by_agent.items() %}
-  <h3>{{ agent_id }} ({{ wm_data.session_id }})</h3>
-  <table>
-    <tr><th>Key</th><th>Value</th></tr>
-    {% for k, v in wm_data.items.items() %}
-    <tr><td class="wm-key">{{ k }}</td><td>{{ v }}</td></tr>
-    {% endfor %}
-    {% if not wm_data.items %}<tr><td colspan="2" class="muted">(empty)</td></tr>{% endif %}
-  </table>
+  <div class="section-head"><div class="section-title">Agent Registry</div></div>
+  {% for profile in agent_profiles %}
+  <div class="agent-card">
+    <div class="agent-card-name">{{ profile.agent_id }}{% if profile.display_name %} &mdash; {{ profile.display_name }}{% endif %}</div>
+    <div class="agent-card-meta">
+      <span class="status-{{ profile.state.status if profile.state else 'idle' }}">{{ profile.state.status if profile.state else 'idle' }}</span>
+      {% if profile.integration_mode %}<span>{{ profile.integration_mode }}</span>{% endif %}
+      {% if profile.native_feature %}<span>{{ profile.native_feature }}</span>{% endif %}
+    </div>
+    {% if profile.onboarding_note %}<div class="muted" style="margin-top: 4px; font-size: 12px;">{{ profile.onboarding_note }}</div>{% endif %}
+  </div>
   {% endfor %}
-  {% if not wm_by_agent %}<p class="muted">No active working memory.</p>{% endif %}
+  {% if not agent_profiles %}<div class="muted">No agents registered yet</div>{% endif %}
 </div>
 
-<div id="tab-episodes" class="tab-content">
-  <h2>Episodes</h2>
-  <table>
-    <tr><th>#</th><th>Title</th><th>Agent</th><th>Category</th><th>Outcome</th><th>Tags</th><th>Started</th></tr>
-    {% for ep in all_episodes %}
-    <tr>
-      <td>{{ ep.id }}</td>
-      <td>{{ ep.title }}</td>
-      <td class="agent">{{ ep.agent_id }}</td>
-      <td>{{ ep.category }}</td>
-      <td class="{{ ep.outcome or '' }}">{{ ep.outcome or '...' }}</td>
-      <td>{% if ep.tags %}{% for tag in ep.tags_list %}<span class="tag">{{ tag }}</span>{% endfor %}{% endif %}</td>
-      <td>{{ ep.started_at }}</td>
-    </tr>
-    {% endfor %}
-    {% if not all_episodes %}<tr><td colspan="7" class="muted">No episodes yet</td></tr>{% endif %}
-  </table>
-</div>
 
 <div id="tab-knowledge" class="tab-content">
-  <h2>Knowledge Base</h2>
+  <div class="section-head"><div class="section-title">Knowledge Base</div></div>
   <table>
-    <tr><th>#</th><th>Category</th><th>Subject</th><th>Predicate</th><th>Object</th><th>Confidence</th><th>Source</th><th>Validated</th></tr>
+    <tr><th>#</th><th>Category</th><th>Subject</th><th>Predicate</th><th>Object</th><th>Confidence</th><th>Source</th></tr>
     {% for k in all_knowledge %}
     <tr>
       <td>{{ k.id }}</td>
@@ -789,28 +740,89 @@ DASHBOARD_HTML = """<!doctype html>
       <td>{{ k.object }}</td>
       <td><div class="confidence"><div class="confidence-fill" style="width:{{ (k.confidence * 100)|int }}%"></div></div> {{ "%.0f"|format(k.confidence * 100) }}%</td>
       <td>{{ k.source or '-' }}</td>
-      <td>{{ k.validated_by or '-' }}</td>
     </tr>
     {% endfor %}
-    {% if not all_knowledge %}<tr><td colspan="8" class="muted">No knowledge yet</td></tr>{% endif %}
+    {% if not all_knowledge %}<tr><td colspan="7" class="muted">No knowledge yet</td></tr>{% endif %}
   </table>
 </div>
 
-<div id="tab-onboarding" class="tab-content">
-  <div class="panel">
-    <h2>Universal Onboarding</h2>
-    <div class="form-grid">
-      <div>
-        <label for="onboarding-agent">Agent</label>
-        <input id="onboarding-agent" list="agent-ids" value="{{ default_onboarding_agent }}">
-      </div>
-      <div style="display:flex; align-items:end; gap:10px;">
-        <button onclick="loadOnboardingPrompt()">Load Onboarding</button>
-        <button onclick="copyText(this, 'onboarding-prompt')">Copy Prompt</button>
-      </div>
+<div id="tab-system" class="tab-content">
+  {% for note in pinned_notes %}
+  <div class="pinned">
+    <h3>{{ note.subject }}</h3>
+    <button class="copy-btn" onclick="copyText(this, 'note-{{ note.id }}')" style="position: absolute; top: 12px; right: 12px;">Copy</button>
+    <pre id="note-{{ note.id }}">{{ note.object }}</pre>
+  </div>
+  {% endfor %}
+
+  <div class="section">
+    <div class="section-head"><div class="section-title">Sessions</div></div>
+    <table>
+      <tr><th>Session</th><th>Agent</th><th>Started</th><th>Status</th></tr>
+      {% for s in sessions %}
+      <tr>
+        <td>{{ s.id }}</td>
+        <td class="agent">{{ s.agent_id }}</td>
+        <td><span class="relative-time" data-ts="{{ s.started_at }}">{{ s.started_at }}</span></td>
+        <td class="{{ 'session-active' if not s.ended_at else 'session-ended' }}">{{ 'active' if not s.ended_at else 'ended' }}</td>
+      </tr>
+      {% endfor %}
+      {% if not sessions %}<tr><td colspan="4" class="muted">No sessions</td></tr>{% endif %}
+    </table>
+  </div>
+
+  <div class="section">
+    <div class="section-head"><div class="section-title">Working Memory</div></div>
+    {% for agent_id, wm_data in wm_by_agent.items() %}
+    <div class="panel">
+      <div style="font-family: 'IBM Plex Mono', monospace; font-weight: 600; margin-bottom: 8px;">{{ agent_id }} <span class="muted">({{ wm_data.session_id }})</span></div>
+      <table>
+        <tr><th>Key</th><th>Value</th></tr>
+        {% for k, v in wm_data.items.items() %}
+        <tr><td class="wm-key">{{ k }}</td><td>{{ v }}</td></tr>
+        {% endfor %}
+        {% if not wm_data.items %}<tr><td colspan="2" class="muted">(empty)</td></tr>{% endif %}
+      </table>
     </div>
-    <div id="onboarding-status" class="api-status">Canonical onboarding bundle for current and future agents.</div>
-    <pre id="onboarding-prompt" class="prompt-box">{{ onboarding_bundle.prompt }}</pre>
+    {% endfor %}
+    {% if not wm_by_agent %}<div class="muted">No active working memory.</div>{% endif %}
+  </div>
+
+  <div class="section">
+    <div class="section-head"><div class="section-title">Episodes</div></div>
+    <table>
+      <tr><th>#</th><th>Title</th><th>Agent</th><th>Category</th><th>Outcome</th><th>Tags</th><th>Started</th></tr>
+      {% for ep in all_episodes %}
+      <tr>
+        <td>{{ ep.id }}</td>
+        <td>{{ ep.title }}</td>
+        <td class="agent">{{ ep.agent_id }}</td>
+        <td>{{ ep.category }}</td>
+        <td>{{ ep.outcome or '...' }}</td>
+        <td>{% if ep.tags %}{% for tag in ep.tags_list %}<span class="tag">{{ tag }}</span>{% endfor %}{% endif %}</td>
+        <td><span class="relative-time" data-ts="{{ ep.started_at }}">{{ ep.started_at }}</span></td>
+      </tr>
+      {% endfor %}
+      {% if not all_episodes %}<tr><td colspan="7" class="muted">No episodes yet</td></tr>{% endif %}
+    </table>
+  </div>
+
+  <div class="section">
+    <div class="section-head"><div class="section-title">Onboarding</div></div>
+    <div class="panel">
+      <div class="form-grid">
+        <div>
+          <label for="onboarding-agent">Agent</label>
+          <input id="onboarding-agent" list="agent-ids" value="{{ default_onboarding_agent }}">
+        </div>
+        <div style="display:flex; align-items:end; gap:10px;">
+          <button onclick="loadOnboardingPrompt()">Load Onboarding</button>
+          <button onclick="copyText(this, 'onboarding-prompt')">Copy Prompt</button>
+        </div>
+      </div>
+      <div id="onboarding-status" class="muted" style="font-size: 11px;">Canonical onboarding bundle for current and future agents.</div>
+      <pre id="onboarding-prompt" class="prompt-box">{{ onboarding_bundle.prompt if onboarding_bundle else '(select an agent)' }}</pre>
+    </div>
   </div>
 </div>
 
