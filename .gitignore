@@ -6,3 +6,6 @@ __pycache__/
 daemon.pid
 .superpowers/
 docs/superpowers/
+mcp-server/node_modules/
+mcp-server/bun.lock
+mcp-server/server.js

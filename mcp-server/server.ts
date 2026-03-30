@@ -20,16 +20,18 @@ import {
   CallToolRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js'
 
-import { appendFileSync } from 'node:fs'
-
 const PONDER_URL = process.env.PONDER_URL || 'http://localhost:9077'
 const AGENT_ID = process.env.PONDER_AGENT_ID || 'claude'
 const POLL_MS = parseInt(process.env.PONDER_POLL_MS || '3000', 10)
+const DEBUG = process.env.PONDER_DEBUG === '1'
+
+let _appendFileSync: typeof import('node:fs').appendFileSync | undefined
 const DEBUG_LOG = `${process.env.HOME}/.claude/channels/ponder/debug.log`
 
 function debugLog(msg: string) {
-  const ts = new Date().toISOString()
-  try { appendFileSync(DEBUG_LOG, `${ts} ${msg}\n`) } catch {}
+  if (!DEBUG) return
+  if (!_appendFileSync) _appendFileSync = require('node:fs').appendFileSync
+  try { _appendFileSync!(DEBUG_LOG, `${new Date().toISOString()} ${msg}\n`) } catch {}
 }
 
 process.on('unhandledRejection', err => {
