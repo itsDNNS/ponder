@@ -751,7 +751,7 @@ DASHBOARD_HTML = """<!doctype html>
   <div class="section-head"><div class="section-title">Active Agents</div></div>
   {% for profile in agents_active %}
   <div class="agent-card">
-    <div class="agent-card-name">{{ profile.agent_id }}{% if profile.display_name and profile.display_name != profile.agent_id %} &mdash; {{ profile.display_name }}{% endif %}</div>
+    <div class="agent-card-name">{{ profile.agent_id }}{% if profile.display_name and profile.display_name != profile.agent_id %} &mdash; <span class="agent-rename" onclick="renameAgent('{{ profile.agent_id }}', this)" title="Click to rename" style="cursor:pointer;border-bottom:1px dotted #ccc;">{{ profile.display_name }}</span>{% else %} <span class="agent-rename" onclick="renameAgent('{{ profile.agent_id }}', this)" title="Click to set display name" style="cursor:pointer;color:#ccc;border-bottom:1px dotted #ccc;font-size:11px;">set name</span>{% endif %}</div>
     <div class="agent-card-meta">
       <span class="status-{{ profile.state.status if profile.state else 'idle' }}">{{ profile.state.status if profile.state else 'idle' }}</span>
       {% if profile.state and profile.state.current_task %}<span>{{ profile.state.current_task }}</span>{% endif %}
@@ -768,7 +768,7 @@ DASHBOARD_HTML = """<!doctype html>
     <div style="margin-top: 10px;">
     {% for profile in agents_inactive %}
     <div class="agent-card" style="opacity: 0.6;">
-      <div class="agent-card-name">{{ profile.agent_id }}{% if profile.display_name and profile.display_name != profile.agent_id %} &mdash; {{ profile.display_name }}{% endif %}</div>
+      <div class="agent-card-name">{{ profile.agent_id }}{% if profile.display_name and profile.display_name != profile.agent_id %} &mdash; <span class="agent-rename" onclick="renameAgent('{{ profile.agent_id }}', this)" title="Click to rename" style="cursor:pointer;border-bottom:1px dotted #ccc;">{{ profile.display_name }}</span>{% else %} <span class="agent-rename" onclick="renameAgent('{{ profile.agent_id }}', this)" title="Click to set display name" style="cursor:pointer;color:#ccc;border-bottom:1px dotted #ccc;font-size:11px;">set name</span>{% endif %}</div>
       <div class="agent-card-meta">
         <span class="muted">inactive</span>
         {% if profile.state and profile.state.updated_at %}<span class="relative-time" data-ts="{{ profile.state.updated_at }}">{{ profile.state.updated_at }}</span>{% endif %}
@@ -785,7 +785,7 @@ DASHBOARD_HTML = """<!doctype html>
     <div style="margin-top: 10px;">
     {% for profile in agents_deactivated %}
     <div class="agent-card" style="opacity: 0.35;">
-      <div class="agent-card-name">{{ profile.agent_id }}{% if profile.display_name and profile.display_name != profile.agent_id %} &mdash; {{ profile.display_name }}{% endif %}</div>
+      <div class="agent-card-name">{{ profile.agent_id }}{% if profile.display_name and profile.display_name != profile.agent_id %} &mdash; <span class="agent-rename" onclick="renameAgent('{{ profile.agent_id }}', this)" title="Click to rename" style="cursor:pointer;border-bottom:1px dotted #ccc;">{{ profile.display_name }}</span>{% else %} <span class="agent-rename" onclick="renameAgent('{{ profile.agent_id }}', this)" title="Click to set display name" style="cursor:pointer;color:#ccc;border-bottom:1px dotted #ccc;font-size:11px;">set name</span>{% endif %}</div>
       <div class="agent-card-meta">
         <span class="muted">deactivated</span>
         {% if profile.state and profile.state.updated_at %}<span class="relative-time" data-ts="{{ profile.state.updated_at }}">{{ profile.state.updated_at }}</span>{% endif %}
@@ -1376,6 +1376,21 @@ function changeChatNickname() {
   }
 }
 getChatNickname();
+
+async function renameAgent(agentId, el) {
+  var current = el.textContent === 'set name' ? agentId : el.textContent;
+  var name = prompt('Display name for ' + agentId + ':', current);
+  if (name !== null && name.trim()) {
+    try {
+      await postJson('/api/agents/' + encodeURIComponent(agentId), { display_name: name.trim() });
+      el.textContent = name.trim();
+      el.style.color = '';
+      el.style.fontSize = '';
+    } catch(e) {
+      alert('Failed: ' + e.message);
+    }
+  }
+}
 
 async function sendChatMessage() {
   const sender = document.getElementById('chat-sender').value.trim();
