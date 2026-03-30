@@ -737,7 +737,7 @@ DASHBOARD_HTML = """<!doctype html>
     <div style="display:flex;gap:12px;flex-wrap:wrap;">
       {% for a in top_agents %}
       <div style="flex:1;min-width:200px;background:#fff;border:1px solid {{ '#d4a017' if loop.index == 1 else '#c0c0c0' if loop.index == 2 else '#b87333' }};border-radius:12px;padding:20px;position:relative;overflow:hidden;{{ 'border-width:2px;' if loop.index == 1 else '' }}">
-        <div style="position:absolute;top:-8px;right:-8px;font-size:48px;opacity:0.08;font-weight:900;">{{ loop.index }}</div>
+        <div style="position:absolute;top:8px;right:12px;font-size:40px;opacity:0.08;font-weight:900;">{{ loop.index }}</div>
         <div style="margin-bottom:4px;">{% if loop.index == 1 %}<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#d4a017" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 6l4 6l5 -4l-2 10h-14l-2 -10l5 4z"/></svg>{% elif loop.index == 2 %}<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#8a8a8a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v4"/><path d="M10 15h4"/></svg>{% else %}<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#b87333" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v4"/><path d="M10 15h4"/></svg>{% endif %}</div>
         <div style="font-family:'IBM Plex Mono',monospace;font-size:15px;font-weight:700;margin-bottom:2px;">{{ a.display_name }}</div>
         <div style="font-size:11px;color:#999;margin-bottom:10px;">{{ a.agent_id }}</div>
