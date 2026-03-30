@@ -621,7 +621,7 @@ DASHBOARD_HTML = """<!doctype html>
       <span class="tl-who">{{ e.source_agent }}</span>
       <span class="tl-text">
         <strong>{{ e.event_type }}</strong>{% if e.target_agent %} &rarr; {{ e.target_agent }}{% endif %}
-        {% if e.data %} &mdash; {{ e.data[:80] }}{% endif %}
+        {% if e.data %}{% set d = e.data_parsed or {} %} &mdash; {{ d.get('msg') or d.get('summary') or d.get('title') or d.get('reason') or (e.data[:80] if e.data is string else '') }}{% endif %}
       </span>
     </div>
     {% endfor %}
@@ -1372,6 +1372,17 @@ def live_dashboard():
     return LIVE_HTML
 
 
+def _parse_event_data(events):
+    for e in events:
+        e["data_parsed"] = {}
+        if e.get("data"):
+            try:
+                e["data_parsed"] = json.loads(e["data"]) if isinstance(e["data"], str) else e["data"]
+            except (json.JSONDecodeError, TypeError):
+                pass
+    return events
+
+
 @app.route("/")
 def dashboard():
     # Gather working memory for all active sessions
@@ -1410,7 +1421,7 @@ def dashboard():
         stats=mem.stats(),
         states=mem.get_all_states(stale_days=7),
         tasks=mem.list_tasks(include_done=False, limit=3),
-        events=mem.get_latest_events(limit=5),
+        events=_parse_event_data(mem.get_latest_events(limit=5)),
         chat_messages=mem.get_chat_messages(limit=50),
         chat_channels=mem.list_chat_channels(limit=20),
         agent_profiles=agent_profiles,
