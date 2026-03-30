@@ -661,25 +661,22 @@ DASHBOARD_HTML = """<!doctype html>
 <div id="tab-chat" class="tab-content">
   <div class="chat-shell">
     <aside class="panel chat-sidebar">
-      <h2>Channels</h2>
-      <div class="muted">Switch channels like an IRC client. The active channel is reflected in the URL.</div>
+      <div class="section-title" style="margin-bottom: 8px;">Channels</div>
       <div id="chat-channel-tabs" class="chat-channel-tabs"></div>
-      <div class="form-grid" style="margin-bottom:0;">
-        <div>
-          <label for="chat-quick-channel">Open Channel</label>
-          <input id="chat-quick-channel" placeholder="general">
-        </div>
+      <div style="margin-top: 12px;">
+        <label for="chat-quick-channel">Open Channel</label>
+        <input id="chat-quick-channel" placeholder="general">
       </div>
-      <div style="margin-top:10px;">
+      <div style="margin-top: 8px;">
         <button onclick="jumpToChatChannel()">Open</button>
       </div>
     </aside>
     <section class="chat-main">
       <div class="panel">
-        <div class="chat-header-row">
+        <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 8px;">
           <div>
-            <h2 id="chat-active-title">#all</h2>
-            <div id="chat-feed-status" class="api-status">Watching chat feed.</div>
+            <div class="section-title" id="chat-active-title">#all</div>
+            <div id="chat-feed-status" class="muted" style="font-size: 11px;">Watching chat feed.</div>
           </div>
           <span id="chat-follow-state" class="chat-follow">Follow mode: on</span>
         </div>
@@ -703,9 +700,9 @@ DASHBOARD_HTML = """<!doctype html>
         </div>
         <label for="chat-body">Message</label>
         <textarea id="chat-body" placeholder="Write a handoff, coordination note, or question."></textarea>
-        <div style="margin-top:10px;">
+        <div style="margin-top: 10px;">
           <button onclick="sendChatMessage()">Send Message</button>
-          <span id="chat-status" class="api-status"></span>
+          <span id="chat-status" class="muted" style="margin-left: 8px; font-size: 11px;"></span>
         </div>
       </div>
       <div id="chat-feed" class="chat-feed"></div>
@@ -985,26 +982,23 @@ function renderChatMessages(messages) {
 
   feed.innerHTML = messages.map((msg) => {
     const sender = escapeHtml(msg.sender_agent);
-    const target = escapeHtml(msg.target_agent || '*');
+    const target = escapeHtml(msg.target_agent || '');
     const body = escapeHtml(msg.body);
-    const channel = escapeHtml(msg.channel);
     const created = escapeHtml(msg.created_at);
     const isSelf = watchAgent && sender.toLowerCase() === watchAgent;
-    const cardClass = isSelf ? 'chat-message self' : 'chat-message remote';
-    const channelMeta = chatState.activeChannel === 'all'
-      ? `<button type="button" class="chat-channel-chip" data-channel="${channel}">${channel}</button>`
-      : `<span>${channel}</span>`;
+    const cls = isSelf ? 'msg self' : 'msg';
+    const targetHtml = target
+      ? `<span class="msg-arrow">&rarr;</span><span class="msg-to">${target}</span>`
+      : '';
     return `
-      <article class="${cardClass}" data-message-id="${msg.id}">
-        <div class="chat-meta">
-          <strong class="agent">${sender}</strong>
-          <span class="chat-target">to ${target}</span>
-          <span>#${msg.id}</span>
-          ${channelMeta}
-          <span>${created}</span>
+      <div class="${cls}" data-id="${msg.id}">
+        <div class="msg-head">
+          <span class="msg-from">${sender}</span>
+          ${targetHtml}
+          <span class="msg-time">${created}</span>
         </div>
-        <div class="chat-text">${body}</div>
-      </article>
+        <div class="msg-body">${body}</div>
+      </div>
     `;
   }).join('');
 }
@@ -1025,7 +1019,7 @@ function bindChatChannelClicks() {
   });
 
   getChatFeed().addEventListener('click', (event) => {
-    const target = event.target.closest('.chat-channel-chip[data-channel]');
+    const target = event.target.closest('[data-channel]');
     if (!target) {
       return;
     }
