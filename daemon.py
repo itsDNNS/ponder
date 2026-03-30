@@ -1212,13 +1212,13 @@ function startChatPolling() {
 }
 
 function getChatNickname() {
-  var nick = localStorage.getItem('ponder_nickname') || '';
+  var nick = localStorage.getItem('ponder_nickname') || 'Human';
   document.getElementById('chat-sender').value = nick;
-  document.getElementById('chat-sender-label').textContent = nick || 'set nickname';
+  document.getElementById('chat-sender-label').textContent = nick;
   return nick;
 }
 function changeChatNickname() {
-  var current = localStorage.getItem('ponder_nickname') || '';
+  var current = localStorage.getItem('ponder_nickname') || 'Human';
   var nick = prompt('Your chat nickname:', current);
   if (nick !== null && nick.trim()) {
     localStorage.setItem('ponder_nickname', nick.trim());
