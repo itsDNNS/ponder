@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Agent Memory Daemon -- REST API for shared agent state.
+"""Ponder Daemon -- REST API for shared agent state.
 
 Runs on localhost:9077 (mnemonic: 90 = memory, 77 = lucky).
 Used by Nova (Python), Claude (CLI/curl), and Dennis (browser).
@@ -1286,7 +1286,7 @@ syncTabFromHash();
 
 LIVE_HTML = """<!doctype html>
 <html><head>
-<title>Agent Memory - Live</title>
+<title>Ponder - Live</title>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
@@ -1317,7 +1317,7 @@ LIVE_HTML = """<!doctype html>
 </style>
 </head>
 <body>
-<h1><div class="dot" id="pulse-dot"></div> Agent Memory Live <span class="refresh" id="refresh-label"></span></h1>
+<h1><div class="dot" id="pulse-dot"></div> Ponder Live <span class="refresh" id="refresh-label"></span></h1>
 <div class="agent-bar" id="agents"></div>
 <div class="section-title">Recent Activity</div>
 <div class="obs-list" id="observations"><div class="empty">Loading...</div></div>
