@@ -683,35 +683,21 @@ DASHBOARD_HTML = """<!doctype html>
         <span id="chat-follow-state" class="chat-follow">Follow mode: on</span>
       </div>
       <div id="chat-feed" class="chat-feed" style="flex: 1; min-height: 300px; max-height: 55vh;"></div>
-      <div style="border: 1px solid #e0ddd6; border-radius: 10px; padding: 12px 16px; margin-top: 10px; background: #fff;">
+      <input type="hidden" id="chat-watch-agent" value="{{ default_onboarding_agent }}">
+      <input type="hidden" id="chat-channel" value="{{ default_chat_channel if default_chat_channel != 'all' else 'general' }}">
+      <input type="hidden" id="chat-target" value="">
+      <input type="hidden" id="chat-sender" value="Dennis">
+      <div style="border: 1px solid #e0ddd6; border-radius: 10px; padding: 10px 14px; margin-top: 10px; background: #fff;">
         <div style="display: flex; gap: 8px; align-items: end;">
           <div style="flex: 1;">
-            <textarea id="chat-body" placeholder="Message..." style="min-height: 44px; max-height: 120px; resize: vertical;"></textarea>
+            <textarea id="chat-body" placeholder="Message..." style="min-height: 40px; max-height: 120px; resize: vertical;"></textarea>
           </div>
-          <button onclick="sendChatMessage()" style="height: 44px; padding: 0 20px;">Send</button>
+          <button onclick="sendChatMessage()" style="height: 40px; padding: 0 20px;">Send</button>
         </div>
-        <details style="margin-top: 8px;">
-          <summary style="font-size: 11px; color: #999; cursor: pointer; user-select: none;">Options</summary>
-          <div class="chat-toolbar" style="margin-top: 8px;">
-            <div>
-              <label for="chat-watch-agent">Highlight Agent</label>
-              <input id="chat-watch-agent" list="agent-ids" value="{{ default_onboarding_agent }}" placeholder="optional">
-            </div>
-            <div>
-              <label for="chat-channel">Channel</label>
-              <input id="chat-channel" value="{{ default_chat_channel if default_chat_channel != 'all' else 'general' }}">
-            </div>
-            <div>
-              <label for="chat-target">Target</label>
-              <input id="chat-target" list="agent-ids" placeholder="optional">
-            </div>
-            <div>
-              <label for="chat-sender">Sender</label>
-              <input id="chat-sender" list="agent-ids" value="{{ default_onboarding_agent }}">
-            </div>
-          </div>
-        </details>
-        <span id="chat-status" class="muted" style="font-size: 11px;"></span>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 6px;">
+          <span id="chat-post-hint" class="muted" style="font-size: 11px;">Posting to <strong id="chat-post-channel-label">#general</strong> as Dennis</span>
+          <span id="chat-status" class="muted" style="font-size: 11px;"></span>
+        </div>
       </div>
     </section>
   </div>
@@ -856,6 +842,7 @@ const chatState = {
   oldestId: INITIAL_CHAT_MESSAGES.length ? INITIAL_CHAT_MESSAGES[0].id : 0,
   pageSize: 100,
   pollHandle: null,
+  lastRealChannel: '{{ default_chat_channel if default_chat_channel != "all" else "general" }}',
 };
 
 function getHashState() {
@@ -969,8 +956,12 @@ function setActiveChatChannel(channel, options) {
   const nextChannel = (channel || 'all').trim() || 'all';
   chatState.activeChannel = nextChannel;
   document.getElementById('chat-quick-channel').value = nextChannel === 'all' ? '' : nextChannel;
-  document.getElementById('chat-channel').value = nextChannel === 'all' ? 'general' : nextChannel;
+  var postChannel = nextChannel === 'all' ? (chatState.lastRealChannel || 'general') : nextChannel;
+  if (nextChannel !== 'all') chatState.lastRealChannel = nextChannel;
+  document.getElementById('chat-channel').value = postChannel;
   document.getElementById('chat-active-title').textContent = nextChannel === 'all' ? 'All Channels' : ('#' + nextChannel);
+  var hint = document.getElementById('chat-post-channel-label');
+  if (hint) hint.textContent = '#' + postChannel;
   resetChatStateForChannel();
   renderChatChannelTabs();
   if (!options || options.syncHash !== false) {
