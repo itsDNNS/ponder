@@ -988,7 +988,7 @@ function renderChatChannelTabs() {
       <span class="chat-channel-count">${totalMessages}</span>
     </button>
   `;
-  const channelTabs = chatState.channelSummaries.map((item) => {
+  const channelTabs = chatState.channelSummaries.filter((item) => item.channel !== 'all').map((item) => {
     const channel = escapeHtml(item.channel);
     const activeClass = item.channel === chatState.activeChannel ? 'active' : '';
     return `
