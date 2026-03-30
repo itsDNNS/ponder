@@ -726,6 +726,25 @@ DASHBOARD_HTML = """<!doctype html>
       <div style="font-size:11px;color:#999;margin-top:2px;">Deactivated</div>
     </div>
   </div>
+  {% if leaderboard %}
+  <div style="margin-bottom:24px;">
+    <div class="section-head"><div class="section-title">Leaderboard</div></div>
+    <div style="background:#fff;border:1px solid #e0ddd6;border-radius:10px;overflow:hidden;">
+      {% for a in leaderboard if a.score > 0 %}
+      <div style="display:grid;grid-template-columns:32px 1fr repeat(4,70px) 80px;gap:8px;align-items:center;padding:10px 16px;{{ 'border-top:1px solid #f0ede6;' if not loop.first else '' }}font-size:12px;">
+        <span style="font-size:16px;font-weight:800;color:{{ '#c45a3c' if loop.index == 1 else '#999' if loop.index <= 3 else '#ccc' }};">{{ loop.index }}</span>
+        <span style="font-family:'IBM Plex Mono',monospace;font-weight:600;">{{ a.display_name }}</span>
+        <span style="text-align:center;color:#999;" title="Messages"><span style="font-weight:600;color:#1a1a1a;">{{ a.messages }}</span> msgs</span>
+        <span style="text-align:center;color:#999;" title="Events"><span style="font-weight:600;color:#1a1a1a;">{{ a.events }}</span> evts</span>
+        <span style="text-align:center;color:#999;" title="Tasks created"><span style="font-weight:600;color:#1a1a1a;">{{ a.tasks_created }}</span> tasks</span>
+        <span style="text-align:center;color:#999;" title="Tasks done"><span style="font-weight:600;color:#1a1a1a;">{{ a.tasks_done }}</span> done</span>
+        <span style="text-align:right;font-weight:700;font-size:14px;color:{{ '#c45a3c' if loop.index == 1 else '#1a1a1a' }};">{{ a.score }} pts</span>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
   <div class="section-head"><div class="section-title">Active Agents</div></div>
   {% for profile in agents_active %}
   <div class="agent-card">
@@ -1600,6 +1619,33 @@ def dashboard():
             agents_inactive.append(p)
         else:
             agents_active.append(p)
+    # Build agent leaderboard
+    agent_scores = {}
+    for p in agent_profiles:
+        aid = p["agent_id"]
+        agent_scores[aid] = {"agent_id": aid, "display_name": p.get("display_name", aid), "messages": 0, "events": 0, "tasks_created": 0, "tasks_done": 0, "score": 0}
+    all_chat = mem.get_chat_messages(limit=5000)
+    for m in all_chat:
+        s = m.get("sender_agent", "")
+        if s in agent_scores:
+            agent_scores[s]["messages"] += 1
+    all_events_full = mem.get_latest_events(limit=5000)
+    for e in all_events_full:
+        s = e.get("source_agent", "")
+        if s in agent_scores:
+            agent_scores[s]["events"] += 1
+    all_tasks_full = mem.list_tasks(include_done=True, limit=500)
+    for t in all_tasks_full:
+        cb = t.get("created_by", "")
+        if cb in agent_scores:
+            agent_scores[cb]["tasks_created"] += 1
+        at = t.get("assigned_to", "")
+        if at in agent_scores and t.get("status") in ("done", "completed", "success"):
+            agent_scores[at]["tasks_done"] += 1
+    for a in agent_scores.values():
+        a["score"] = a["messages"] * 2 + int(a["events"] * 0.1) + a["tasks_created"] * 10 + a["tasks_done"] * 15
+    leaderboard = sorted(agent_scores.values(), key=lambda x: x["score"], reverse=True)
+
     default_onboarding_agent = request.args.get("agent_id") or (
         agent_profiles[0]["agent_id"] if agent_profiles else "codex"
     )
@@ -1618,6 +1664,7 @@ def dashboard():
         agents_active=agents_active,
         agents_inactive=agents_inactive,
         agents_deactivated=agents_deactivated,
+        leaderboard=leaderboard,
         sessions=sessions[:20],
         wm_by_agent=wm_by_agent,
         all_episodes=all_episodes,
