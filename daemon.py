@@ -1003,13 +1003,13 @@ function renderChatChannelTabs() {
 
 function renderMarkdown(text) {
   var s = escapeHtml(text);
-  s = s.replace(/```([\s\S]*?)```/g, '<pre style="background:#f5f3ef;padding:8px 10px;border-radius:6px;margin:4px 0;overflow-x:auto;font-size:12px;">$1</pre>');
-  s = s.replace(/`([^`]+)`/g, '<code style="background:#f5f3ef;padding:1px 5px;border-radius:3px;font-size:12px;">$1</code>');
-  s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-  s = s.replace(/\*([^*]+)\*/g, '<em>$1</em>');
-  s = s.replace(/^- (.+)$/gm, '<div style="padding-left:12px;">&bull; $1</div>');
-  s = s.replace(/^\d+\. (.+)$/gm, function(m, p1, offset, str) { return '<div style="padding-left:12px;">' + m.match(/^\d+/)[0] + '. ' + p1 + '</div>'; });
-  s = s.replace(/\n/g, '<br>');
+  s = s.replace(new RegExp('```([\\s\\S]*?)```', 'g'), '<pre style="background:#f5f3ef;padding:8px 10px;border-radius:6px;margin:4px 0;overflow-x:auto;font-size:12px;">$1</pre>');
+  s = s.replace(new RegExp('`([^`]+)`', 'g'), '<code style="background:#f5f3ef;padding:1px 5px;border-radius:3px;font-size:12px;">$1</code>');
+  s = s.replace(new RegExp('\\*\\*([^*]+)\\*\\*', 'g'), '<strong>$1</strong>');
+  s = s.replace(new RegExp('\\*([^*]+)\\*', 'g'), '<em>$1</em>');
+  s = s.replace(new RegExp('^- (.+)$', 'gm'), '<div style="padding-left:12px;">&bull; $1</div>');
+  s = s.replace(new RegExp('^\\d+[.] (.+)$', 'gm'), function(m, p1) { return '<div style="padding-left:12px;">' + m.match(new RegExp('^\\d+'))[0] + '. ' + p1 + '</div>'; });
+  s = s.replace(new RegExp('\\n', 'g'), '<br>');
   return s;
 }
 
