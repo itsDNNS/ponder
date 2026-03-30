@@ -5,3 +5,4 @@
 __pycache__/
 daemon.pid
 .superpowers/
+docs/superpowers/
