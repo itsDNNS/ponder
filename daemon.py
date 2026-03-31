@@ -56,7 +56,7 @@ import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from flask import Flask, jsonify, request, render_template_string
+from flask import Flask, jsonify, request, render_template_string, send_from_directory
 
 from memory import AgentMemory
 
@@ -72,6 +72,8 @@ PORT = int(os.environ.get("PONDER_PORT", 9077))
 PONDER_URL = os.environ.get("PONDER_URL", f"http://localhost:{PORT}")
 DOCKER = os.environ.get("DOCKER", "").strip() == "1"
 PID_FILE = Path.home() / ".ponder" / "ponder" / "daemon.pid"
+BASE_DIR = Path(__file__).resolve().parent
+LOGO_DIR = BASE_DIR / "assets" / "logo"
 
 app = Flask(__name__)
 mem = AgentMemory()
@@ -83,6 +85,9 @@ WIZARD_HTML = """<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Ponder Setup</title>
+<link rel="icon" type="image/svg+xml" href="/assets/logo/favicon.svg">
+<link rel="icon" type="image/svg+xml" href="/assets/logo/favicon.svg" media="(prefers-color-scheme: light)">
+<link rel="icon" type="image/svg+xml" href="/assets/logo/favicon-dark.svg" media="(prefers-color-scheme: dark)">
 <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800;900&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -118,6 +123,18 @@ WIZARD_HTML = """<!doctype html>
     max-width: 560px;
     width: 100%;
     text-align: center;
+  }
+
+  .wizard-brand {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 24px;
+  }
+  .wizard-brand img {
+    width: 72px;
+    height: 72px;
+    display: block;
   }
 
   .wizard-title {
@@ -449,7 +466,9 @@ WIZARD_HTML = """<!doctype html>
     <div class="wizard-dot"></div>
   </div>
   <div class="wizard-content">
-    <div style="font-size: 64px; font-weight: 900; margin-bottom: 24px; letter-spacing: -2px;">P</div>
+    <div class="wizard-brand">
+      <img src="/assets/logo/ponder-logo-light.svg" alt="Ponder">
+    </div>
     <div class="wizard-title">Welcome to Ponder</div>
     <div class="wizard-subtitle">
       Shared memory for your AI agents. Connect Claude Code, Codex, and other agents
@@ -735,6 +754,9 @@ DASHBOARD_HTML = """<!doctype html>
 <title>Ponder</title>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" type="image/svg+xml" href="/assets/logo/favicon.svg">
+<link rel="icon" type="image/svg+xml" href="/assets/logo/favicon.svg" media="(prefers-color-scheme: light)">
+<link rel="icon" type="image/svg+xml" href="/assets/logo/favicon-dark.svg" media="(prefers-color-scheme: dark)">
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800;900&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
 
@@ -763,7 +785,12 @@ DASHBOARD_HTML = """<!doctype html>
     z-index: 0;
     color: rgba(0,0,0,0.06);
   }
-  .hero-mark svg { width: 140px; height: 158px; }
+  .hero-mark img {
+    width: 140px;
+    height: 140px;
+    display: block;
+    opacity: 0.22;
+  }
   .hero-content { position: relative; z-index: 1; }
   .hero-label { display: none; }
   .hero-title {
@@ -1216,13 +1243,7 @@ DASHBOARD_HTML = """<!doctype html>
   <!-- Hero -->
   <div class="hero">
     <div class="hero-mark">
-      <svg viewBox="0 0 160 180" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <circle cx="80" cy="72" r="64" stroke="currentColor" stroke-width="4" fill="none"/>
-        <path d="M60 44 L60 100 M60 44 L85 44 C100 44 108 52 108 62 C108 72 100 80 85 80 L60 80"
-              stroke="currentColor" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-        <circle cx="32" cy="148" r="10" stroke="currentColor" stroke-width="3.5" fill="none"/>
-        <circle cx="18" cy="172" r="5.5" stroke="currentColor" stroke-width="3" fill="none"/>
-      </svg>
+      <img src="/assets/logo/ponder-logo-light.svg" alt="">
     </div>
     <div class="hero-content">
       <h1 class="hero-title">
@@ -2414,10 +2435,14 @@ LIVE_HTML = """<!doctype html>
 <title>Ponder - Live</title>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" type="image/svg+xml" href="/assets/logo/favicon.svg">
+<link rel="icon" type="image/svg+xml" href="/assets/logo/favicon.svg" media="(prefers-color-scheme: light)">
+<link rel="icon" type="image/svg+xml" href="/assets/logo/favicon-dark.svg" media="(prefers-color-scheme: dark)">
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', monospace; background: #06080f; color: #e8edff; padding: 16px; }
   h1 { font-size: 1.1rem; color: #7c3aed; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+  .live-logo { width: 24px; height: 24px; display: block; }
   h1 .dot { width: 8px; height: 8px; border-radius: 50%; animation: pulse 2s ease infinite; }
   .dot-active { background: #4ade80; }
   .dot-idle { background: #888; }
@@ -2442,7 +2467,7 @@ LIVE_HTML = """<!doctype html>
 </style>
 </head>
 <body>
-<h1><div class="dot" id="pulse-dot"></div> Ponder Live <span class="refresh" id="refresh-label"></span></h1>
+<h1><img class="live-logo" src="/assets/logo/ponder-logo-dark.svg" alt=""><div class="dot" id="pulse-dot"></div> Ponder Live <span class="refresh" id="refresh-label"></span></h1>
 <div class="agent-bar" id="agents"></div>
 <div class="section-title">Recent Activity</div>
 <div class="obs-list" id="observations"><div class="empty">Loading...</div></div>
@@ -2494,6 +2519,11 @@ setInterval(refresh, 3000);
 @app.route("/live")
 def live_dashboard():
     return LIVE_HTML
+
+
+@app.route("/assets/logo/<path:filename>")
+def serve_logo_asset(filename):
+    return send_from_directory(LOGO_DIR, filename)
 
 
 def _parse_event_data(events):
