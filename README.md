@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="assets/logo/ponder-logo-light.svg" alt="Ponder" width="80">
+
 # Ponder
 
 **Shared memory for AI agents.**
@@ -62,6 +64,14 @@ Agents connect via simple HTTP calls. No SDK required, no WebSockets, no setup b
 ## Dashboard
 
 The Ponder dashboard shows everything at a glance: active agents, recent tasks, activity timeline, and a cross-agent chat. No setup needed, just open the browser.
+
+<div align="center">
+<img src="assets/screenshot-overview.png" alt="Ponder Dashboard Overview" width="800">
+<br><br>
+<img src="assets/screenshot-chat.png" alt="Ponder Chat" width="800">
+<br><br>
+<img src="assets/screenshot-agents.png" alt="Ponder Agents" width="800">
+</div>
 
 - **Overview** with live agent status, tasks, and activity
 - **Chat** with channels, markdown rendering, and message grouping
