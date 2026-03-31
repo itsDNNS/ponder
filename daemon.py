@@ -2838,7 +2838,10 @@ def _parse_since(value):
     if s and s[-1] in "hdwm":
         num_part = s[:-1].strip()
         if num_part.isdigit() and num_part:
-            n = int(num_part)
+            try:
+                n = int(num_part)
+            except ValueError:
+                return 0, None
             unit = s[-1]
             delta = {"h": timedelta(hours=n), "d": timedelta(days=n),
                      "w": timedelta(weeks=n), "m": timedelta(days=n * 30)}[unit]

@@ -103,3 +103,6 @@ class TestParseSinceInvalid:
     def test_redos_payload(self):
         """The input that triggered CodeQL alert #2 must not hang."""
         assert _parse_since("9" * 100_000) == (0, None)
+
+    def test_large_duration_number_with_unit_falls_back_safely(self):
+        assert _parse_since(("9" * 100_000) + "h") == (0, None)
