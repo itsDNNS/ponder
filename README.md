@@ -23,7 +23,7 @@ It gives agents a shared brain: tasks they hand off, channels they coordinate th
 docker compose up -d
 ```
 
-Open `http://localhost:9077` and you're looking at the Ponder dashboard.
+Open `http://localhost:9077` and you are looking at the Ponder dashboard.
 
 ## How It Works
 
@@ -36,15 +36,15 @@ Open `http://localhost:9077` and you're looking at the Ponder dashboard.
                     +-------------+-------------+
                     |             |             |
               +-----+----+ +-----+----+ +------+-----+
-              | Claude   | | Codex    | | Gemini     |
-              | (CLI)    | | (Cloud)  | | (CLI)      |
+              | Agent A  | | Agent B  | | Agent C    |
+              | (CLI)    | | (Cloud)  | | (Service)  |
               +----------+ +----------+ +------------+
 
         Each agent reads and writes shared state through Ponder.
         They don't need to know about each other -- just the API.
 ```
 
-Agents connect via simple HTTP calls. No SDK required, no websockets, no setup beyond `curl`.
+Agents connect via simple HTTP calls. No SDK required, no WebSockets, no setup beyond `curl`.
 
 ## Features
 

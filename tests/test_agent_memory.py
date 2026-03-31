@@ -34,7 +34,7 @@ class AgentMemoryFeatureTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         data = response.get_json()
         self.assertEqual(data["profile"]["agent_id"], "codex")
-        self.assertIn("Do not create or rely on ~/.claude/CLAUDE.md", data["prompt"])
+        self.assertIn("Do not create or rely on another agent's config files", data["prompt"])
         self.assertIn("/api/context/onboarding?agent_id=codex", data["prompt"])
 
         uppercase = self.client.get("/api/onboarding/Codex").get_json()
@@ -43,7 +43,7 @@ class AgentMemoryFeatureTests(unittest.TestCase):
 
         generic = self.client.get("/api/onboarding/orbital").get_json()
         self.assertEqual(generic["profile"]["agent_id"], "orbital")
-        self.assertIn("Do not create configuration files for unrelated agent ecosystems", generic["prompt"])
+        self.assertIn("Do not create or rely on another agent's config files", generic["prompt"])
 
     def test_context_onboarding_returns_canonical_entries_and_keeps_custom(self):
         self.mem.learn(
@@ -178,6 +178,16 @@ class AgentMemoryFeatureTests(unittest.TestCase):
         self.assertEqual(payload[1]["message_count"], 2)
 
     def test_dashboard_contains_hash_addressable_chat_feed(self):
+        self.client.post(
+            "/api/agents/agent-linux",
+            json={
+                "display_name": "Agent Linux",
+                "integration_mode": "native",
+                "integration_target": "Use the agent's own startup instructions",
+                "native_feature": "Agent startup instructions",
+                "onboarding_note": "Keep onboarding self-contained.",
+            },
+        )
         self.mem.append_chat_message(
             sender_agent="codex",
             target_agent="Claude",
@@ -208,7 +218,7 @@ class AgentMemoryFeatureTests(unittest.TestCase):
 
     def test_observation_create_and_list(self):
         resp = self.client.post("/api/observations", json={
-            "agent_id": "claude-lin",
+            "agent_id": "agent-linux",
             "tool_name": "Edit",
             "action": "edit",
             "file_path": "/app/test-project/web.py",
@@ -219,7 +229,7 @@ class AgentMemoryFeatureTests(unittest.TestCase):
         self.assertTrue(data["ok"])
         self.assertIn("id", data)
 
-        resp = self.client.get("/api/observations?agent_id=claude-lin")
+        resp = self.client.get("/api/observations?agent_id=agent-linux")
         self.assertEqual(resp.status_code, 200)
         obs = resp.get_json()
         self.assertEqual(len(obs), 1)
@@ -235,10 +245,10 @@ class AgentMemoryFeatureTests(unittest.TestCase):
 
     def test_observation_filter_by_tool(self):
         self.client.post("/api/observations", json={
-            "agent_id": "claude-lin", "tool_name": "Read", "summary": "Read file"
+            "agent_id": "agent-linux", "tool_name": "Read", "summary": "Read file"
         })
         self.client.post("/api/observations", json={
-            "agent_id": "claude-lin", "tool_name": "Bash", "summary": "Run command"
+            "agent_id": "agent-linux", "tool_name": "Bash", "summary": "Run command"
         })
         resp = self.client.get("/api/observations?tool_name=Bash")
         obs = resp.get_json()
@@ -247,11 +257,11 @@ class AgentMemoryFeatureTests(unittest.TestCase):
 
     def test_observation_fts_search(self):
         self.client.post("/api/observations", json={
-            "agent_id": "claude-lin", "tool_name": "Edit",
+            "agent_id": "agent-linux", "tool_name": "Edit",
             "summary": "Fixed smokeping proxy validation",
         })
         self.client.post("/api/observations", json={
-            "agent_id": "claude-lin", "tool_name": "Read",
+            "agent_id": "agent-linux", "tool_name": "Read",
             "summary": "Read requirements.txt",
         })
         resp = self.client.get("/api/observations/search?q=smokeping")
@@ -278,7 +288,7 @@ class AgentMemoryFeatureTests(unittest.TestCase):
             ("Write", "write", "/app/new_file.py", "Wrote new_file.py"),
         ]:
             self.client.post("/api/observations", json={
-                "agent_id": "claude-lin", "tool_name": tool,
+                "agent_id": "agent-linux", "tool_name": tool,
                 "action": action, "file_path": fp,
                 "summary": summary, "session_id": session_id,
             })

@@ -471,7 +471,7 @@ WIZARD_HTML = """<!doctype html>
     </div>
     <div class="wizard-title">Welcome to Ponder</div>
     <div class="wizard-subtitle">
-      Shared memory for your AI agents. Connect Claude Code, Codex, and other agents
+      Shared memory for your AI agents. Connect your assistants, automations, and other agents
       to a central knowledge layer that persists across sessions.
     </div>
     <button class="wizard-btn" onclick="showStep('register')">Get Started &rarr;</button>
@@ -496,13 +496,13 @@ WIZARD_HTML = """<!doctype html>
     <div class="wizard-card">
       <div class="field-group">
         <div class="wizard-label">Agent ID</div>
-        <input id="agent-id-input" class="wizard-input" placeholder="e.g. claude-lin">
-        <div class="wizard-hint">A short, unique identifier. Use lowercase with hyphens. Convention: <strong>tool-machine</strong> (e.g. claude-lin = Claude on Linux).</div>
+        <input id="agent-id-input" class="wizard-input" placeholder="e.g. agent-linux">
+        <div class="wizard-hint">A short, unique identifier. Use lowercase with hyphens. Convention: <strong>tool-machine</strong> (e.g. agent-linux = one agent on Linux).</div>
         <div class="example-pills">
-          <span class="example-pill" onclick="document.getElementById('agent-id-input').value=this.textContent">claude-lin</span>
-          <span class="example-pill" onclick="document.getElementById('agent-id-input').value=this.textContent">codex-win</span>
-          <span class="example-pill" onclick="document.getElementById('agent-id-input').value=this.textContent">claude-mac</span>
-          <span class="example-pill" onclick="document.getElementById('agent-id-input').value=this.textContent">gemini-srv</span>
+          <span class="example-pill" onclick="document.getElementById('agent-id-input').value=this.textContent">agent-linux</span>
+          <span class="example-pill" onclick="document.getElementById('agent-id-input').value=this.textContent">builder-win</span>
+          <span class="example-pill" onclick="document.getElementById('agent-id-input').value=this.textContent">helper-mac</span>
+          <span class="example-pill" onclick="document.getElementById('agent-id-input').value=this.textContent">reviewer-srv</span>
         </div>
       </div>
       <div class="field-group">
@@ -544,7 +544,7 @@ WIZARD_HTML = """<!doctype html>
       </div>
       <div class="send-guide-step">
         <div class="send-guide-num">2</div>
-        <div>Open a conversation with your agent (Claude Code, Codex, or any AI assistant)</div>
+        <div>Open a conversation with your agent or automation client</div>
       </div>
       <div class="send-guide-step">
         <div class="send-guide-num">3</div>

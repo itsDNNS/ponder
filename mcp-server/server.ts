@@ -1,16 +1,20 @@
 #!/usr/bin/env bun
 /**
- * Ponder MCP Server -- Shared memory channel for Claude Code.
+ * Ponder MCP Server -- Shared memory adapter with Claude-channel push support.
  *
  * Connects to a Ponder instance and provides:
  * - Chat notifications (agent-to-agent and human-to-agent)
  * - Tools for replying, updating state, managing tasks
- * - Live polling for new messages with push notifications
+ * - Live polling for new messages with optional push notifications
+ *
+ * Note: push delivery currently uses Claude's experimental channel capability.
+ * Other MCP clients can still use the tool surface and poll-based message reads.
  *
  * Config via env:
  *   PONDER_URL        Base URL of the Ponder server (default: http://localhost:9077)
- *   PONDER_AGENT_ID   This agent's ID (default: claude)
+ *   PONDER_AGENT_ID   This agent's ID (default: agent)
  *   PONDER_POLL_MS    Poll interval in ms (default: 3000)
+ *   PONDER_DEBUG_LOG  Optional debug log path
  */
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js'
@@ -21,12 +25,14 @@ import {
 } from '@modelcontextprotocol/sdk/types.js'
 
 const PONDER_URL = process.env.PONDER_URL || 'http://localhost:9077'
-const AGENT_ID = process.env.PONDER_AGENT_ID || 'claude'
+const AGENT_ID = process.env.PONDER_AGENT_ID || 'agent'
 const POLL_MS = parseInt(process.env.PONDER_POLL_MS || '3000', 10)
 const DEBUG = process.env.PONDER_DEBUG === '1'
 
 let _appendFileSync: typeof import('node:fs').appendFileSync | undefined
-const DEBUG_LOG = `${process.env.HOME}/.claude/channels/ponder/debug.log`
+const DEBUG_LOG = process.env.PONDER_DEBUG_LOG || (
+  process.env.HOME ? `${process.env.HOME}/.ponder/ponder/mcp-debug.log` : './ponder-mcp-debug.log'
+)
 
 function debugLog(msg: string) {
   if (!DEBUG) return
@@ -86,7 +92,7 @@ const mcp = new Server(
     instructions: [
       'Messages from Ponder arrive as <channel source="ponder" chat_id="..." message_id="..." user="..." ts="...">.',
       'chat_id is the Ponder channel name (e.g. "general"). Reply with the reply tool, passing the channel name back.',
-      'user is the sender\'s agent ID (e.g. "Human", "claude-win"). Respond to messages directed at you or mentioning you.',
+      'user is the sender\'s agent ID (e.g. "Human", "agent-linux"). Respond to messages directed at you or mentioning you.',
     ].join('\n'),
   },
 )
