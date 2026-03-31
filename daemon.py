@@ -50,7 +50,6 @@ API:
 import json
 import logging
 import os
-import re
 import signal
 import sys
 from datetime import datetime, timedelta, timezone
@@ -2835,15 +2834,18 @@ def _parse_since(value):
     """Parse 'since' param: integer (event ID) or duration like 24h, 7d, 1w."""
     if not value:
         return 0, None
-    m = re.fullmatch(r"(\d+)\s*([hdwm])", value.strip())
-    if m:
-        n, unit = int(m.group(1)), m.group(2)
-        delta = {"h": timedelta(hours=n), "d": timedelta(days=n),
-                 "w": timedelta(weeks=n), "m": timedelta(days=n * 30)}[unit]
-        cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - delta
-        return 0, cutoff.strftime("%Y-%m-%d %H:%M:%S")
+    s = value.strip()
+    if s and s[-1] in "hdwm":
+        num_part = s[:-1].strip()
+        if num_part.isdigit() and num_part:
+            n = int(num_part)
+            unit = s[-1]
+            delta = {"h": timedelta(hours=n), "d": timedelta(days=n),
+                     "w": timedelta(weeks=n), "m": timedelta(days=n * 30)}[unit]
+            cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - delta
+            return 0, cutoff.strftime("%Y-%m-%d %H:%M:%S")
     try:
-        return int(value), None
+        return int(s), None
     except ValueError:
         return 0, None
 
