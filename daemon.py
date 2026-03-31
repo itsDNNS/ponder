@@ -2807,8 +2807,9 @@ def api_tasks_claim(task_id):
         return jsonify({"error": "agent required"}), 400
     try:
         task = mem.claim_task(agent, task_id)
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    except Exception:
+        log.exception("Failed to claim task %d for agent %s", task_id, agent)
+        return jsonify({"error": "internal error"}), 500
     if not task:
         return jsonify({"error": "Task not available"}), 409
     return jsonify({"ok": True, "task": task})
